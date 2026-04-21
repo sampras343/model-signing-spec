@@ -107,24 +107,40 @@ specifications.
 OMS supports three signing methods.  The choice of method determines the
 content of `verificationMaterial` per [SIGSTORE-BUNDLE]:
 
-| Method | `verificationMaterial` content |
-|---|---|
-| `key` | `publicKey` with a key hint per [`sigstore_common.proto#PublicKeyIdentifier`][sigstore-common] |
-| `certificate` | `publicKey` with hint, OR `x509CertificateChain` per [`sigstore_common.proto#X509CertificateChain`][sigstore-common] |
-| `sigstore` | `certificate` (Fulcio short-lived cert per [`sigstore_common.proto#X509Certificate`][sigstore-common]), `tlogEntries` (Rekor entries per [`sigstore_rekor.proto#TransparencyLogEntry`][sigstore-rekor]), and optionally `timestampVerificationData` (RFC 3161 timestamps per [`sigstore_bundle.proto#TimestampVerificationData`][sigstore-proto]) |
+| Method | Required fields | Optional fields |
+|---|---|---|
+| `key` | `publicKey` per [`sigstore_common.proto#PublicKeyIdentifier`][sigstore-common] | `tlogEntries`, `timestampVerificationData` |
+| `certificate` | `x509CertificateChain` per [`sigstore_common.proto#X509CertificateChain`][sigstore-common] | `tlogEntries`, `timestampVerificationData` |
+| `sigstore` | `certificate` per [`sigstore_common.proto#X509Certificate`][sigstore-common], `tlogEntries` per [`sigstore_rekor.proto#TransparencyLogEntry`][sigstore-rekor] | `timestampVerificationData` per [`sigstore_bundle.proto#TimestampVerificationData`][sigstore-proto] |
 
-For the `key` and `certificate` methods, `tlogEntries` and
-`timestampVerificationData` are not applicable (no Sigstore
-infrastructure is involved) and MAY be absent.  Implementations that
-include `tlogEntries` for these methods MUST set it to an empty array.
+**Field semantics by method:**
 
-For the `sigstore` method, `tlogEntries` MUST be present and contain
-at least one entry per [SIGSTORE-BUNDLE] and [SIGSTORE-REKOR].
+- **`key`:** Uses long-lived key pairs. `publicKey` identifies the
+  verification key.  Producers MUST use the `hint` field (a hex-encoded
+  key fingerprint).  Older bundles (pre-v1.1.0) used `rawBytes` instead;
+  verifiers SHOULD accept either.  No Sigstore infrastructure is
+  involved, so `tlogEntries` and `timestampVerificationData` are not
+  applicable and MAY be absent.
 
-The `timestampVerificationData` field MAY be present for any signing
-method.  When present, it contains RFC 3161 signed timestamps per
-[SIGSTORE-BUNDLE].  OMS does not define the verification semantics for
-these fields — they are governed entirely by the Sigstore specifications.
+- **`certificate`:** Uses a long-lived signing certificate and CA chain.
+  `x509CertificateChain.certificates` contains the leaf certificate
+  followed by the CA chain, each as a Base64-encoded DER certificate.
+  Note: this is the Sigstore `X509CertificateChain` type, distinct from
+  the `X509Certificate` type used by the `sigstore` method.
+
+- **`sigstore`:** Uses Sigstore keyless signing (Fulcio + Rekor).
+  `certificate` contains a single short-lived Fulcio certificate (the
+  Sigstore `X509Certificate` type — not `X509CertificateChain`).
+  `tlogEntries` MUST contain at least one Rekor transparency log entry.
+  `timestampVerificationData` MAY contain RFC 3161 signed timestamps.
+
+**DSSE signature fields:**
+
+The `signatures[].keyid` field is OPTIONAL per the [DSSE
+specification][dsse].  Producers MAY omit it entirely.  Verifiers MUST
+accept any of: absent, empty string (`""`), or `null`.  OMS does not
+use `keyid` for verification — the key is identified through
+`verificationMaterial`.
 
 ### 4.2. Supported Key Types
 
@@ -266,14 +282,16 @@ entry representing the model as a whole:
 
 | Field | Value |
 |---|---|
-| `name` | A human-readable identifier for the model.  Implementations SHOULD use the model directory name or filename. |
+| `name` | The basename of the model directory or filename (e.g., `"my-model"` for `/path/to/my-model/`). For single-file models, use the filename without the directory path. |
 | `digest` | A digest computed over the canonicalized manifest.  The algorithm for computing this digest is implementation-defined. |
 
-> **Interoperability note:** Current implementations differ in how
-> `subject[0].name` is computed (e.g., `"model"` vs. the directory
-> basename).  Verifiers SHOULD NOT rely on the specific value of
-> `subject[0].name` for correctness.  Future versions of this spec may
-> prescribe a canonical subject name.
+Producers MUST set `subject[0].name` to the basename of the model path.
+Verifiers MUST NOT rely on the specific value of `subject[0].name` for
+correctness — it is informational only and does not affect verification.
+
+> **Backward compatibility note:** Some older implementations used a
+> hardcoded value (e.g., `"model"`) instead of the basename.  Verifiers
+> MUST accept any non-empty string.
 
 ### 6.6. Statement Assembly
 
@@ -423,25 +441,39 @@ SHOULD support at least one prior version for a deprecation window of
 
 | Version range | `predicateType` | Notable differences from current |
 |---|---|---|
-| **v1.1.0+** (current) | `https://model_signing/signature/v1.0` | Normative format. `tlogEntries` required for `sigstore` method, optional for `key`/`certificate`. |
-| v0.3.1 – v1.0.0 | `https://model_signing/signature/v1.0` | Same predicate structure. `signatures[].keyid` may be `null` (protobuf default) instead of `""`. |
+| **v1.1.0+** (current) | `https://model_signing/signature/v1.0` | Normative format. See Section 4.1 for per-method field requirements. |
+| v0.3.1 – v1.0.0 | `https://model_signing/signature/v1.0` | Same predicate structure but: `publicKey` uses `rawBytes`+`keyDetails` instead of `hint`; `signatures[].keyid` may be `null`; `serialization.ignore_paths` absent. |
 | v0.2.0 | `https://model_signing/Digests/v0.1` | Deprecated predicate layout: file digests placed in `subject` entries instead of `predicate.resources`. No `serialization` object. |
 
-### 11.1. Verifier Backward Compatibility
+### 11.1. Known Field Differences Across Versions and Implementations
 
-When a verifier encounters a bundle that does not conform to the
-current schema, it SHOULD apply the following relaxations based on the
-bundle's origin version:
+| Field | Current normative | Known variants | Verifier guidance |
+|---|---|---|---|
+| `publicKey` | `{"hint": "<fingerprint>"}` | Pre-v1.1.0: `{"rawBytes": "...", "keyDetails": "..."}` | MUST accept either `hint` or `rawBytes` |
+| `signatures[].keyid` | Optional, MAY be omitted | `""` (Python), absent (Go), `null` (pre-v1.1.0) | MUST accept absent, empty string, or null |
+| `subject[0].name` | Basename of the model path | `"model"` (some Python versions), directory basename (Go) | MUST accept any non-empty string; informational only |
+| `tlogEntries` | Required for `sigstore`; optional for `key`/`certificate` | `[]` (Python key/cert), absent (Go key/cert), populated (sigstore) | MUST require for `sigstore`; MUST accept absent or empty for `key`/`certificate` |
+| `serialization.ignore_paths` | Optional array | Absent in pre-v1.1.0 bundles | MUST accept absence |
+| `certificate` vs `x509CertificateChain` | `certificate` for `sigstore`; `x509CertificateChain` for `certificate` method | These are distinct Sigstore protobuf types, not interchangeable | MUST match field to method |
 
-1. **`tlogEntries` absent** (all versions, `key`/`certificate` only):
-   `tlogEntries` is not applicable for `key` and `certificate` methods
-   and MAY be absent.  The verifier MUST still reject a
-   `sigstore`-method bundle that lacks `tlogEntries`.
+### 11.2. Verifier Backward Compatibility
 
-2. **`signatures[].keyid` is `null`** (pre-v1.1.0): The verifier MAY
-   accept `null` where the current schema requires a string.
+When a verifier encounters a bundle from an older version, it SHOULD
+apply the following relaxations:
 
-3. **Deprecated predicate type** (v0.2.0): The verifier MAY support
+1. **`publicKey.rawBytes` instead of `publicKey.hint`** (pre-v1.1.0):
+   Accept `rawBytes` (and optionally `keyDetails`) as an alternative
+   to `hint` for key identification.
+
+2. **`signatures[].keyid` is `null` or absent**: Accept any of
+   absent, empty string, or `null`.  OMS does not use `keyid` for
+   verification.
+
+3. **`serialization.ignore_paths` absent** (pre-v1.1.0): Treat as
+   if no user-specified paths were excluded (default exclusions still
+   apply per §6.2).
+
+4. **Deprecated predicate type** (v0.2.0): The verifier MAY support
    `https://model_signing/Digests/v0.1` for backward compatibility
    but MUST NOT produce bundles with this predicate type.
 

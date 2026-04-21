@@ -38,7 +38,7 @@
         },
         "keyid": {
           "type": ["string", "null"],
-          "description": "Optional key identifier. May be null in older bundle versions."
+          "description": "Optional key identifier per DSSE spec. Producers MAY omit this field entirely. Verifiers MUST accept absent, empty string, or null. OMS does not use this field for verification."
         }
       },
       "additionalProperties": false
