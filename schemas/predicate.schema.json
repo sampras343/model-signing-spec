@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://model_signing/predicate/v1.0/schema",
+  "title": "OMS Predicate v1.0",
+  "description": "JSON Schema for the OMS predicate body within an in-toto Statement v1. This schema defines only the model-signing-specific predicate; the enclosing in-toto Statement and Sigstore Bundle are governed by their respective specifications.",
+  "type": "object",
+  "required": ["resources", "serialization"],
+  "additionalProperties": false,
+  "properties": {
+    "resources": {
+      "type": "array",
+      "minItems": 1,
+      "description": "File manifest. Each entry describes one file in the signing scope, per in-toto Resource Descriptor (https://github.com/in-toto/attestation/blob/main/spec/v1/resource_descriptor.md).",
+      "items": {
+        "$ref": "#/$defs/resource_descriptor"
+      }
+    },
+    "serialization": {
+      "$ref": "#/$defs/serialization"
+    }
+  },
+  "$defs": {
+    "resource_descriptor": {
+      "type": "object",
+      "description": "A single file entry in the model manifest.",
+      "required": ["name", "digest", "algorithm"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Relative path from the model root, using '/' as separator."
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]+$",
+          "description": "Hex-encoded hash of the file contents."
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": ["sha256", "blake2b"],
+          "description": "Hash algorithm used. See algorithm-registry.md."
+        }
+      },
+      "additionalProperties": true
+    },
+    "serialization": {
+      "type": "object",
+      "description": "Canonicalization metadata recording how files were enumerated and hashed.",
+      "required": ["method", "hash_type", "allow_symlinks"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["files"],
+          "description": "Serialization method."
+        },
+        "hash_type": {
+          "type": "string",
+          "enum": ["sha256", "blake2b"],
+          "description": "Hash algorithm used for all resource digests. See algorithm-registry.md."
+        },
+        "allow_symlinks": {
+          "type": "boolean",
+          "description": "Whether symbolic links were followed during file enumeration."
+        },
+        "ignore_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Paths excluded from the signing scope."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
