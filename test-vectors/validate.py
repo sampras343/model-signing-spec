@@ -17,10 +17,10 @@ import sys
 from pathlib import Path
 
 from jsonschema import Draft202012Validator, ValidationError
+from oms_schemas import SCHEMA_DIR
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schemas"
 VECTORS_DIR = Path(__file__).resolve().parent
 
 
