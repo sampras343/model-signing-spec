@@ -1,18 +1,158 @@
-"""OMS JSON Schemas for bundle validation.
+"""OMS JSON Schemas and validation for OpenSSF Model Signing bundles.
 
-This package ships the normative JSON Schemas from the OpenSSF Model
-Signing specification.  Conformance suites and implementations install
-this package to validate bundles against the spec — the same way
-sigstore-conformance depends on sigstore-protobuf-specs.
+This package ships the normative JSON Schemas from the OMS specification
+and provides ``validate_bundle()`` — the single entry point for
+validating an OMS bundle against the spec.
 
 Usage::
 
-    from oms_schemas import SCHEMA_DIR
+    from pathlib import Path
+    from oms_schemas import validate_bundle
 
-    bundle_schema = json.loads((SCHEMA_DIR / "bundle.schema.json").read_text())
+    validate_bundle(Path("model.sig"), method="key")
 """
 
+from __future__ import annotations
+
+import base64
+import json
+import warnings
 from pathlib import Path
+from typing import Any
+
+from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
+from referencing.jsonschema import DRAFT202012
 
 SCHEMA_DIR: Path = Path(__file__).parent
 """Path to the directory containing the OMS JSON Schema files."""
+
+DEPRECATED_PREDICATE_TYPE = "https://model_signing/Digests/v0.1"
+
+_bundle_validator: Draft202012Validator | None = None
+_statement_validator: Draft202012Validator | None = None
+
+
+def _init_validators() -> tuple[Draft202012Validator, Draft202012Validator]:
+    """Load schemas and compile validators (cached after first call)."""
+    global _bundle_validator, _statement_validator
+    if _bundle_validator is not None and _statement_validator is not None:
+        return _bundle_validator, _statement_validator
+
+    schemas: dict[str, Any] = {}
+    for f in SCHEMA_DIR.glob("*.json"):
+        schemas[f.name] = json.loads(f.read_text())
+
+    pairs = [
+        (s["$id"], Resource.from_contents(s, default_specification=DRAFT202012))
+        for s in schemas.values()
+    ]
+    registry = Registry().with_resources(pairs)
+
+    _bundle_validator = Draft202012Validator(
+        schemas["bundle.schema.json"], registry=registry
+    )
+    _statement_validator = Draft202012Validator(
+        schemas["statement.schema.json"], registry=registry
+    )
+    return _bundle_validator, _statement_validator
+
+
+def decode_payload(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Decode the Base64-encoded DSSE payload into an in-toto Statement."""
+    raw = bundle["dsseEnvelope"]["payload"]
+    padded = raw + "=" * (-len(raw) % 4)
+    return json.loads(base64.b64decode(padded))
+
+
+def validate_bundle(bundle_path: Path, method: str | None = None) -> None:
+    """Validate an OMS bundle file against the spec schemas.
+
+    Two-level validation:
+      Level 1: ``bundle.schema.json`` validates the outer Sigstore bundle
+      Level 2: ``statement.schema.json`` validates the decoded DSSE payload
+
+    After schema validation, method-specific structural checks are applied
+    to verify the ``verificationMaterial`` matches the signing method.
+
+    Args:
+        bundle_path: Path to the bundle JSON file.
+        method: Signing method (``key``, ``certificate``, ``sigstore``).
+            When provided, verifies that ``verificationMaterial`` contains
+            the correct fields for that method.
+
+    Raises:
+        jsonschema.ValidationError: If the bundle fails schema validation.
+        json.JSONDecodeError: If the bundle is not valid JSON.
+        AssertionError: If method-specific structural checks fail.
+    """
+    bundle_v, statement_v = _init_validators()
+
+    raw = bundle_path.read_text()
+    bundle = json.loads(raw)
+
+    bundle_v.validate(bundle)
+
+    statement = decode_payload(bundle)
+    if statement.get("predicateType") == DEPRECATED_PREDICATE_TYPE:
+        warnings.warn(
+            f"Bundle uses deprecated predicateType {DEPRECATED_PREDICATE_TYPE!r}; "
+            f"skipping statement-level schema validation (see SPEC.md §11)",
+            stacklevel=2,
+        )
+    else:
+        statement_v.validate(statement)
+
+    if method:
+        vm = bundle.get("verificationMaterial", {})
+        validate_method_fields(vm, method)
+
+
+def validate_method_fields(vm: dict[str, Any], method: str) -> None:
+    """Assert verificationMaterial fields match the declared signing method.
+
+    The bundle schema uses ``anyOf`` to accept all three method variants,
+    but cannot enforce that a ``key``-method bundle uses ``publicKey``
+    rather than ``x509CertificateChain``.  This function checks that
+    the correct branch was used.
+
+    Args:
+        vm: The ``verificationMaterial`` object from the bundle.
+        method: One of ``key``, ``certificate``, ``sigstore``.
+
+    Raises:
+        AssertionError: If the fields do not match the method.
+    """
+    if method == "key":
+        assert "publicKey" in vm, (
+            "key-method bundle must contain verificationMaterial.publicKey"
+        )
+        assert "x509CertificateChain" not in vm, (
+            "key-method bundle must not contain x509CertificateChain"
+        )
+        assert "certificate" not in vm, (
+            "key-method bundle must not contain certificate (sigstore field)"
+        )
+
+    elif method == "certificate":
+        assert "x509CertificateChain" in vm, (
+            "certificate-method bundle must contain "
+            "verificationMaterial.x509CertificateChain"
+        )
+        assert "certificate" not in vm, (
+            "certificate-method bundle must not contain certificate "
+            "(that is the sigstore field)"
+        )
+
+    elif method == "sigstore":
+        assert "certificate" in vm, (
+            "sigstore-method bundle must contain "
+            "verificationMaterial.certificate (Fulcio cert)"
+        )
+        assert "tlogEntries" in vm, (
+            "sigstore-method bundle must contain tlogEntries"
+        )
+        tlog = vm["tlogEntries"]
+        assert isinstance(tlog, list) and len(tlog) >= 1, (
+            "sigstore-method bundle must have at least one tlogEntry"
+        )
