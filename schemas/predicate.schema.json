@@ -37,7 +37,7 @@
         },
         "algorithm": {
           "type": "string",
-          "enum": ["sha256", "blake2b"],
+          "enum": ["sha256", "blake2b", "blake3"],
           "description": "Hash algorithm used. See algorithm-registry.md."
         }
       },
@@ -50,12 +50,12 @@
       "properties": {
         "method": {
           "type": "string",
-          "enum": ["files"],
-          "description": "Serialization method."
+          "pattern": "^(files|file-shard-[1-9][0-9]*)$",
+          "description": "Serialization method. 'files' hashes each file as a whole. 'file-shard-<N>' splits files into N-byte shards. See spec.md §6.3."
         },
         "hash_type": {
           "type": "string",
-          "enum": ["sha256", "blake2b"],
+          "enum": ["sha256", "blake2b", "blake3"],
           "description": "Hash algorithm used for all resource digests. See algorithm-registry.md."
         },
         "allow_symlinks": {

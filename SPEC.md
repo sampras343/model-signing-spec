@@ -213,9 +213,9 @@ canonicalization.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `method` | string | REQUIRED | Serialization method.  Currently always `"files"`. |
+| `method` | string | REQUIRED | Serialization method: `"files"` or `"file-shard-<N>"` (see [Section 6.3.1](#631-file-serialization) and [Section 6.3.2](#632-shard-serialization)). |
 | `hash_type` | string | REQUIRED | Hash algorithm used for file digests (see [Section 7](#7-hashing-algorithms)). |
-| `allow_symlinks` | boolean | REQUIRED | Whether symbolic links were followed during enumeration. |
+| `allow_symlinks` | boolean | REQUIRED | Whether symbolic links were followed during enumeration (see [Section 6.1.1](#611-symbolic-link-handling)). |
 | `ignore_paths` | array of string | OPTIONAL | Paths that were excluded from the signing scope (see [Section 6.2](#62-path-exclusion)). |
 
 Verifiers MUST use `serialization.hash_type` to determine which hash
@@ -230,15 +230,75 @@ This section defines how a signer produces an OMS bundle from a model.
 1. The signer MUST recursively enumerate all regular files under the
    model root directory (or the single file, for single-file models).
 
-2. For each file, compute the relative path from the model root using
-   `/` as the path separator, regardless of the host operating system.
+2. For each file, compute the relative path from the model root and
+   canonicalize it per
+   [Section 6.1.2](#612-path-canonicalization).
 
 3. Exclude files matching the default ignore list and any
    user-specified ignore paths (see [Section 6.2](#62-path-exclusion)).
 
-4. If `allow_symlinks` is `false` (the default), the signer MUST NOT
-   follow symbolic links.  If a symbolic link is encountered, the signer
-   SHOULD report an error.
+4. Apply symbolic link handling per
+   [Section 6.1.1](#611-symbolic-link-handling).
+
+#### 6.1.1. Symbolic Link Handling
+
+The `allow_symlinks` field in `serialization` records the symlink policy
+used during enumeration.
+
+**When `allow_symlinks` is `false` (the default):**
+
+- The signer MUST NOT follow symbolic links.
+- If a symbolic link is encountered during enumeration, the signer
+  SHOULD report an error.
+- Symbolic links MUST NOT appear as entries in `resources`.
+
+**When `allow_symlinks` is `true`:**
+
+- The signer MUST resolve symbolic links to their target and hash the
+  target file's contents.
+- Each resolved symlink produces a resource descriptor whose `name` is
+  the symlink's relative path (not the target's path).
+- If a symbolic link target is outside the model root, the signer MUST
+  report an error.
+- If resolving symbolic links produces a cycle (a symlink that
+  transitively points back to an ancestor directory), the signer MUST
+  report an error.
+- If multiple symlinks resolve to the same target file, each symlink
+  produces a separate resource descriptor with its own `name`.
+
+**Verifier behavior:** The verifier MUST apply the same `allow_symlinks`
+policy recorded in `serialization.allow_symlinks` when enumerating the
+model for verification.
+
+#### 6.1.2. Path Canonicalization
+
+All `resources[].name` values MUST be canonicalized as follows:
+
+1. Use `/` (forward slash) as the path separator, regardless of the
+   host operating system.
+
+2. Paths MUST be relative to the model root.  A path MUST NOT start
+   with `/` (absolute path) or contain `../` components (parent
+   traversal).
+
+3. Paths MUST be normalized: collapse any `./` prefix or interior `.`
+   components (e.g., `./config.json` becomes `config.json`;
+   `subdir/./weights.bin` becomes `subdir/weights.bin`).  Redundant
+   consecutive separators MUST be collapsed (e.g., `subdir//file`
+   becomes `subdir/file`).
+
+4. Paths MUST NOT have a trailing `/`.
+
+5. For single-file models, the resource `name` MUST be the filename
+   only (basename), without any directory component.
+
+6. Path comparison MUST be byte-exact (case-sensitive).  Two paths
+   that differ only in case (e.g., `Model.bin` vs `model.bin`) are
+   distinct resources.
+
+Signers MUST produce canonicalized paths.  Verifiers MUST canonicalize
+paths from the local filesystem before comparing them against the
+manifest.
 
 ### 6.2. Path Exclusion
 
@@ -256,22 +316,96 @@ flag or equivalent API.
 
 Excluded paths SHOULD be recorded in `serialization.ignore_paths`.
 
-### 6.3. File Hashing
+#### 6.2.1. Matching Semantics
+
+Default exclusions (`.git`, `.gitignore`, `.gitattributes`, `.github`)
+are matched as **top-level path components** of the model root.  A
+default entry `".git"` excludes the file or directory `.git` at the
+model root (and its entire subtree if it is a directory), but does NOT
+exclude a path such as `subdir/.git`.
+
+User-specified ignore paths are matched as **exact relative paths from
+the model root**.  An entry `"cache"` excludes only `<model-root>/cache`
+(and its subtree if it is a directory).  It does NOT match
+`subdir/cache` or files whose name merely contains `"cache"`.
+
+Ignore path entries MUST NOT contain glob characters (`*`, `?`, `[`),
+leading `/`, or `../` components.  Entries MUST use `/` as the path
+separator.
+
+During verification, the verifier uses `serialization.ignore_paths`
+(if present) combined with the default exclusions to determine which
+files in the model directory are expected to be absent from `resources`.
+Files that are present in the directory but absent from `resources` and
+not covered by any ignore path MUST cause verification to fail (unless
+`--ignore-unsigned-files` is enabled per
+[Section 8.5](#85-unsigned-file-handling)).
+
+### 6.3. File Hashing and Serialization
+
+The `serialization.method` field determines how files are mapped to
+resource descriptors.  Implementations MUST support file serialization
+and SHOULD support shard serialization.
+
+#### 6.3.1. File Serialization (`"files"`)
+
+The default method.  Each file in the enumeration produces exactly one
+resource descriptor:
+
+1. Read the file contents as a byte sequence.
+2. Compute the hash of the entire file using the algorithm specified by
+   `hash_type`.
+3. Encode the hash as a lowercase hexadecimal string.
+
+The resource descriptor fields are:
+
+- `name`: the relative path from the model root.
+- `digest`: the hex-encoded hash of the entire file contents.
+- `algorithm`: the hash algorithm identifier.
+
+#### 6.3.2. Shard Serialization (`"file-shard-<N>"`)
+
+For large files, each file MAY be split into consecutive fixed-size
+shards.  The method string encodes the shard size:
+`"file-shard-<N>"`, where `<N>` is the shard size in bytes as an ASCII
+decimal integer (e.g., `"file-shard-1048576"` for 1 MiB shards).
 
 For each file in the enumeration:
 
-1. Read the file contents as a byte sequence.
-2. Compute the hash using the algorithm specified by `hash_type`.
-3. Encode the hash as a lowercase hexadecimal string.
+1. Split the file into consecutive shards of exactly N bytes.  The last
+   shard of a file MAY be smaller than N bytes.
+2. Compute the hash of each shard independently using `hash_type`.
+3. Produce one resource descriptor per shard.
+
+The resource descriptor fields for shard `i` (0-indexed) of file
+`<path>` are:
+
+- `name`: `"<path>:shard-<i>"` (e.g., `"weights.bin:shard-0"`).
+- `digest`: the hex-encoded hash of the shard's bytes.
+- `algorithm`: the hash algorithm identifier.
+
+**Default shard size:** Implementations SHOULD default to
+N = 1,048,576 (1 MiB) when shard serialization is selected.
+
+**Example:** A 2.5 MB file `weights.bin` with N = 1048576 produces
+three resource descriptors:
+
+```json
+{ "name": "weights.bin:shard-0", "algorithm": "sha256", "digest": "..." },
+{ "name": "weights.bin:shard-1", "algorithm": "sha256", "digest": "..." },
+{ "name": "weights.bin:shard-2", "algorithm": "sha256", "digest": "..." }
+```
+
+**Verifier behavior:** The verifier MUST parse the shard size N from
+the `method` string and apply the same sharding when recomputing
+digests.  A verifier that does not implement shard serialization MUST
+reject the bundle with an informative error when encountering a
+`"file-shard-*"` method.
 
 ### 6.4. Resource Descriptor Construction
 
-For each file, construct a resource descriptor (see
-[Section 5.2.1](#521-resources--file-manifest)) with:
-
-- `name`: the relative path computed in [Section 6.1](#61-file-enumeration).
-- `digest`: the hex-encoded hash computed in [Section 6.3](#63-file-hashing).
-- `algorithm`: the hash algorithm identifier.
+For each file (or shard), construct a resource descriptor per
+[Section 6.3](#63-file-hashing-and-serialization).
 
 Sort the resource descriptors lexicographically by `name`.
 
@@ -283,7 +417,44 @@ entry representing the model as a whole:
 | Field | Value |
 |---|---|
 | `name` | The basename of the model directory or filename (e.g., `"my-model"` for `/path/to/my-model/`). For single-file models, use the filename without the directory path. |
-| `digest` | A digest computed over the canonicalized manifest.  The algorithm for computing this digest is implementation-defined. |
+| `digest` | A root digest computed over the individual resource digests per the algorithm below. |
+
+#### 6.5.1. Root Digest Algorithm
+
+The root digest provides a single hash that represents the entire
+model manifest.  It MUST be computed as follows:
+
+1. Take the `resources` array in its canonical order (sorted
+   lexicographically by `name`, as required by
+   [Section 6.4](#64-resource-descriptor-construction)).
+2. For each resource descriptor in order, convert its `digest` hex
+   string to raw bytes (e.g., `"a1b2c3"` → `[0xa1, 0xb2, 0xc3]`).
+3. Concatenate all raw byte sequences in order.
+4. Compute SHA-256 over the concatenated bytes.
+5. Encode the result as a lowercase hexadecimal string.
+
+The root digest MUST be recorded in `subject[0].digest` using the key
+`"sha256"`:
+
+```json
+"subject": [{
+  "name": "my-model",
+  "digest": { "sha256": "<root-digest-hex>" }
+}]
+```
+
+The root digest algorithm is always SHA-256, regardless of the
+`hash_type` used for individual file digests.  A model hashed with
+`blake3` still has a SHA-256 root digest.
+
+> **Note:** The root digest is covered by the DSSE signature (it is
+> part of the signed payload).  Verifiers are not required to
+> recompute the root digest during verification — per-file digest
+> comparison ([Section 8.4](#84-manifest-verification)) and signature
+> verification ([Section 8.2](#82-signature-verification)) are
+> sufficient to establish integrity.  The root digest serves as a
+> compact identifier for the model manifest that can be referenced
+> from external metadata without carrying the full resource list.
 
 Producers MUST set `subject[0].name` to the basename of the model path.
 Verifiers MUST NOT rely on the specific value of `subject[0].name` for
@@ -377,17 +548,23 @@ Implementations SHOULD validate the decoded statement against
 
 Verify the model contents against the signed manifest:
 
-1. Read `serialization.hash_type` to determine the hash algorithm.
-2. Read `serialization.ignore_paths` (if present) to determine excluded
+1. Read `serialization.method` to determine the serialization method
+   (see [Section 6.3](#63-file-hashing-and-serialization)).
+2. Read `serialization.hash_type` to determine the hash algorithm.
+3. Read `serialization.ignore_paths` (if present) to determine excluded
    paths.
-3. Enumerate all files in the model directory per
+4. Read `serialization.allow_symlinks` to determine the symlink policy
+   (see [Section 6.1.1](#611-symbolic-link-handling)).
+5. Enumerate all files in the model directory per
    [Section 6.1](#61-file-enumeration), applying the same exclusion
-   rules.
-4. For each resource descriptor in `resources`:
-   a. Verify that a file with the matching `name` exists in the model.
-   b. Compute the hash of that file using the algorithm from step 1.
-   c. Verify that the computed hash matches `digest`.
-5. Verify that no files exist in the model that are not accounted for
+   rules and symlink policy.
+6. Hash each file (or shard) using the serialization method and hash
+   algorithm from steps 1–2.
+7. For each resource descriptor in `resources`:
+   a. Verify that a file with the matching `name` exists in the model
+      (for shard resources, the file portion before `:shard-`).
+   b. Verify that the computed hash matches `digest`.
+8. Verify that no files exist in the model that are not accounted for
    in `resources` (unless the `--ignore-unsigned-files` option is set).
 
 If any check in steps 4–5 fails, the verifier MUST report verification
@@ -424,8 +601,12 @@ An implementation conforms to this specification if it:
    [Section 6](#6-signing-procedure).
 4. Implements the verification procedure defined in
    [Section 8](#8-verification-procedure).
-5. Supports at minimum the `sha256` hash algorithm and the `key`
-   signing method.
+5. Supports at minimum the `sha256` hash algorithm, the `files`
+   serialization method, and the `key` signing method.
+
+Implementations SHOULD additionally support shard serialization
+(`"file-shard-<N>"`) per
+[Section 6.3.2](#632-shard-serialization).
 
 A verifier MAY additionally support the deprecated v0.1 predicate
 format (see [Section 5.1](#51-predicate-type)) for backwards
@@ -480,7 +661,7 @@ apply the following relaxations:
 Producers MUST always generate bundles conforming to the current
 version.
 
-### 11.2. Schema and Conformance Testing
+### 11.3. Schema and Conformance Testing
 
 The schemas in `schemas/` validate **only** the current format.
 Backward compatibility is tested separately in the conformance suite

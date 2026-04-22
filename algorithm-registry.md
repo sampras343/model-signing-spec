@@ -22,9 +22,10 @@ These algorithms are used to compute per-file digests in
 |---|---|---|---|
 | `sha256` | SHA-256 ([FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final)) | 256 bits | REQUIRED (default) |
 | `blake2b` | BLAKE2b ([RFC 7693](https://www.rfc-editor.org/rfc/rfc7693)) | 256 bits | OPTIONAL |
+| `blake3` | BLAKE3 ([blake3.io](https://blake3.io), [spec](https://github.com/BLAKE3-team/BLAKE3-specs/blob/master/blake3.pdf)) | 256 bits | OPTIONAL |
 
 Implementations MUST support `sha256`.  Implementations MAY support
-`blake2b`.
+`blake2b` and `blake3`.
 
 ## Signing Key Types
 
