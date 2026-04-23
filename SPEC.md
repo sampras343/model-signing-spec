@@ -1,8 +1,6 @@
 # OpenSSF Model Signing (OMS) Specification
 
-**Version:** 1.0-draft  
-**Status:** Draft  
-**Date:** 2026-04-21
+**Version:** 1.0
 
 ## 1. Introduction
 
@@ -15,7 +13,7 @@ attestation framework.  Instead it composes:
 
 | Concern | Spec used by OMS |
 |---|---|
-| Signing envelope | [DSSE — Dead Simple Signing Envelope][dsse] |
+| Signing envelope | [DSSE - Dead Simple Signing Envelope][dsse] |
 | Attestation statement | [in-toto Attestation Framework v1][intoto-statement] |
 | Bundle container | [Sigstore Bundle Format][sigstore-bundle] |
 
@@ -47,8 +45,8 @@ document are to be interpreted as described in [RFC 2119][rfc2119].
 | [SIGSTORE-PROTO] | Sigstore protobuf specifications | https://github.com/sigstore/protobuf-specs |
 | [SIGSTORE-COMMON] | Sigstore common types (sigstore_common.proto) | https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_common.proto |
 | [SIGSTORE-REKOR] | Sigstore Rekor types (sigstore_rekor.proto) | https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_rekor.proto |
-| [RFC 2119] | Key words for use in RFCs | https://www.rfc-editor.org/rfc/rfc2119 |
-| [RFC 4648] | Base encodings (Base64) | https://www.rfc-editor.org/rfc/rfc4648 |
+| [RFC-2119] | Key words for use in RFCs | https://www.rfc-editor.org/rfc/rfc2119 |
+| [RFC-4648] | Base encodings (Base64) | https://www.rfc-editor.org/rfc/rfc4648 |
 
 ## 3. Terminology
 
@@ -94,9 +92,9 @@ An OMS bundle is a JSON file conforming to the [Sigstore Bundle
 Format][sigstore-bundle].  Implementations MUST follow the Sigstore
 bundle specification for the top-level structure, including:
 
-- `mediaType` — as defined by [SIGSTORE-BUNDLE].
-- `verificationMaterial` — as defined by [SIGSTORE-BUNDLE].
-- `dsseEnvelope` — as defined by [DSSE-ENVELOPE].
+- `mediaType` - as defined by [SIGSTORE-BUNDLE].
+- `verificationMaterial` - as defined by [SIGSTORE-BUNDLE].
+- `dsseEnvelope` - as defined by [DSSE-ENVELOPE].
 
 OMS does **not** redefine any of these fields.  Their semantics,
 validation rules, and versioning are governed entirely by the upstream
@@ -125,12 +123,14 @@ content of `verificationMaterial` per [SIGSTORE-BUNDLE]:
 - **`certificate`:** Uses a long-lived signing certificate and CA chain.
   `x509CertificateChain.certificates` contains the leaf certificate
   followed by the CA chain, each as a Base64-encoded DER certificate.
-  Note: this is the Sigstore `X509CertificateChain` type, distinct from
-  the `X509Certificate` type used by the `sigstore` method.
+  Note: this is the Sigstore [`X509CertificateChain`][sigstore-common]
+  type (field 2 of [`VerificationMaterial.content`][sigstore-bundle-proto]),
+  distinct from the single [`X509Certificate`][sigstore-common] type
+  (field 5) used by the `sigstore` method.
 
 - **`sigstore`:** Uses Sigstore keyless signing (Fulcio + Rekor).
   `certificate` contains a single short-lived Fulcio certificate (the
-  Sigstore `X509Certificate` type — not `X509CertificateChain`).
+  Sigstore `X509Certificate` type - not `X509CertificateChain`).
   `tlogEntries` MUST contain at least one Rekor transparency log entry.
   `timestampVerificationData` MAY contain RFC 3161 signed timestamps.
 
@@ -139,7 +139,7 @@ content of `verificationMaterial` per [SIGSTORE-BUNDLE]:
 The `signatures[].keyid` field is OPTIONAL per the [DSSE
 specification][dsse].  Producers MAY omit it entirely.  Verifiers MUST
 accept any of: absent, empty string (`""`), or `null`.  OMS does not
-use `keyid` for verification — the key is identified through
+use `keyid` for verification - the key is identified through
 `verificationMaterial`.
 
 ### 4.2. Supported Key Types
@@ -180,7 +180,7 @@ The predicate body is a JSON object with two REQUIRED keys:
 }
 ```
 
-#### 5.2.1. `resources` — File Manifest
+#### 5.2.1. `resources` - File Manifest
 
 An array of resource descriptors, one per file included in the signing
 scope.  Each entry follows the [in-toto Resource
@@ -205,7 +205,7 @@ Implementations MUST NOT include directory entries — only regular files.
 > file manifest but does not prohibit their presence.  Verifiers MUST
 > ignore unrecognized fields in resource descriptors.
 
-#### 5.2.2. `serialization` — Canonicalization Metadata
+#### 5.2.2. `serialization` - Canonicalization Metadata
 
 A JSON object recording the parameters used to enumerate and hash the
 model files.  This metadata allows verifiers to reproduce the same
@@ -229,6 +229,8 @@ This section defines how a signer produces an OMS bundle from a model.
 
 1. The signer MUST recursively enumerate all regular files under the
    model root directory (or the single file, for single-file models).
+   The model MUST contain at least one regular file after exclusions
+   are applied; an empty model MUST be rejected.
 
 2. For each file, compute the relative path from the model root and
    canonicalize it per
@@ -259,10 +261,10 @@ used during enumeration.
 - Each resolved symlink produces a resource descriptor whose `name` is
   the symlink's relative path (not the target's path).
 - If a symbolic link target is outside the model root, the signer MUST
-  report an error.
+  report an warning.
 - If resolving symbolic links produces a cycle (a symlink that
   transitively points back to an ancestor directory), the signer MUST
-  report an error.
+  report a warning.
 - If multiple symlinks resolve to the same target file, each symlink
   produces a separate resource descriptor with its own `name`.
 
@@ -296,6 +298,11 @@ All `resources[].name` values MUST be canonicalized as follows:
    that differ only in case (e.g., `Model.bin` vs `model.bin`) are
    distinct resources.
 
+7. All path components MUST be representable as valid UTF-8.  If a
+   filename contains byte sequences that are not valid UTF-8, the
+   signer MUST reject the file (since the path cannot be losslessly
+   encoded in the JSON bundle).
+
 Signers MUST produce canonicalized paths.  Verifiers MUST canonicalize
 paths from the local filesystem before comparing them against the
 manifest.
@@ -312,7 +319,12 @@ The following paths MUST be excluded by default:
 Implementations MAY exclude additional paths (e.g., `.gitmodules`).
 
 Users MAY specify additional paths to exclude via the `--ignore-paths`
-flag or equivalent API.
+flag.
+
+Implementations MUST also exclude the signature output file (e.g., the
+path passed via `--signature`) from the file enumeration during both
+signing and verification.  This prevents the bundle itself from being
+included in its own manifest.
 
 Excluded paths SHOULD be recorded in `serialization.ignore_paths`.
 
@@ -373,7 +385,9 @@ decimal integer (e.g., `"file-shard-1048576"` for 1 MiB shards).
 For each file in the enumeration:
 
 1. Split the file into consecutive shards of exactly N bytes.  The last
-   shard of a file MAY be smaller than N bytes.
+   shard of a file MAY be smaller than N bytes.  An empty (0-byte)
+   file MUST produce exactly one shard (shard-0) whose digest is the
+   hash of the empty byte string.
 2. Compute the hash of each shard independently using `hash_type`.
 3. Produce one resource descriptor per shard.
 
@@ -384,17 +398,25 @@ The resource descriptor fields for shard `i` (0-indexed) of file
 - `digest`: the hex-encoded hash of the shard's bytes.
 - `algorithm`: the hash algorithm identifier.
 
+Note: because filenames may contain colon characters, parsers MUST
+identify the shard suffix by matching the *last* occurrence of the
+pattern `:shard-<i>` (where `<i>` is one or more ASCII digits) rather
+than splitting on the first colon.
+
 **Default shard size:** Implementations SHOULD default to
 N = 1,048,576 (1 MiB) when shard serialization is selected.
 
-**Example:** A 2.5 MB file `weights.bin` with N = 1048576 produces
-three resource descriptors:
+**Example:** A 2,621,440-byte (2.5 MiB) file `weights.bin` with
+N = 1,048,576 produces three resource descriptors:
 
 ```json
 { "name": "weights.bin:shard-0", "algorithm": "sha256", "digest": "..." },
 { "name": "weights.bin:shard-1", "algorithm": "sha256", "digest": "..." },
 { "name": "weights.bin:shard-2", "algorithm": "sha256", "digest": "..." }
 ```
+
+Shard-0 and shard-1 each cover 1,048,576 bytes; shard-2 covers the
+remaining 524,288 bytes.
 
 **Verifier behavior:** The verifier MUST parse the shard size N from
 the `method` string and apply the same sharding when recomputing
@@ -449,7 +471,7 @@ The root digest algorithm is always SHA-256, regardless of the
 
 > **Note:** The root digest is covered by the DSSE signature (it is
 > part of the signed payload).  Verifiers are not required to
-> recompute the root digest during verification — per-file digest
+> recompute the root digest during verification, per-file digest
 > comparison ([Section 8.4](#84-manifest-verification)) and signature
 > verification ([Section 8.2](#82-signature-verification)) are
 > sufficient to establish integrity.  The root digest serves as a
@@ -458,7 +480,7 @@ The root digest algorithm is always SHA-256, regardless of the
 
 Producers MUST set `subject[0].name` to the basename of the model path.
 Verifiers MUST NOT rely on the specific value of `subject[0].name` for
-correctness — it is informational only and does not affect verification.
+correctness, it is informational only and does not affect verification.
 
 > **Backward compatibility note:** Some older implementations used a
 > hardcoded value (e.g., `"model"`) instead of the basename.  Verifiers
@@ -489,7 +511,7 @@ Wrap the statement in a DSSE envelope per [DSSE-PROTO]:
    [INTOTO-STATEMENT].
 3. Compute the DSSE Pre-Authentication Encoding (PAE) and sign it with
    the signing key per [DSSE-PROTO].
-4. Encode the payload as Base64 per [RFC 4648].
+4. Encode the payload as Base64 per [RFC-4648].
 
 ### 6.8. Bundle Assembly
 
@@ -514,8 +536,12 @@ Parse the OMS bundle file as JSON and validate it against the OMS bundle
 schema ([`schemas/bundle.schema.json`](./schemas/bundle.schema.json))
 and the Sigstore bundle format per [SIGSTORE-BUNDLE].
 
-Implementations MUST validate the `mediaType` field per
-[SIGSTORE-BUNDLE].
+The `mediaType` field MUST be validated per [SIGSTORE-BUNDLE].
+Implementations that use an upstream Sigstore client library (e.g.,
+`sigstore-python`, `sigstore-go`) satisfy this requirement
+automatically, since those libraries validate `mediaType` during
+bundle parsing.  Implementations that parse bundles directly (without
+an upstream library) MUST perform this check themselves.
 
 ### 8.2. Signature Verification
 
@@ -529,7 +555,7 @@ signing method:
 | `certificate` | Validate the certificate chain in `verificationMaterial` against the trusted root CA, then verify the DSSE signature against the leaf certificate's public key.  The leaf certificate MUST be within its validity period. |
 | `sigstore` | Per [SIGSTORE-BUNDLE], including transparency log verification. |
 
-OMS does not define the cryptographic verification procedure — it
+OMS does not define the cryptographic verification procedure, it
 defers entirely to [DSSE-PROTO] and [SIGSTORE-BUNDLE].
 
 ### 8.3. Statement Validation
@@ -561,9 +587,9 @@ Verify the model contents against the signed manifest:
 6. Hash each file (or shard) using the serialization method and hash
    algorithm from steps 1–2.
 7. For each resource descriptor in `resources`:
-   a. Verify that a file with the matching `name` exists in the model
+   - Verify that a file with the matching `name` exists in the model
       (for shard resources, the file portion before `:shard-`).
-   b. Verify that the computed hash matches `digest`.
+   - Verify that the computed hash matches `digest`.
 8. Verify that no files exist in the model that are not accounted for
    in `resources` (unless the `--ignore-unsigned-files` option is set).
 
@@ -581,10 +607,10 @@ NOT reject the model for containing additional unlisted files.
 
 ## 9. Bundle File Conventions
 
-The OMS bundle is a detached signature — it is a separate file from the
+The OMS bundle is a detached signature, it is a separate file from the
 model it signs.
 
-- The bundle file SHOULD be named with a `.sig` extension.
+- The bundle file SHOULD be named with a `.sig` extension as of this version.
 - The bundle file SHOULD be stored alongside the model (in the same
   directory or parent directory).
 - The bundle file itself SHOULD be excluded from the signing scope.
@@ -769,11 +795,14 @@ OMS defines only the innermost layer.  Everything else is governed by
 the referenced upstream specifications.
 
 [dsse]: https://github.com/secure-systems-lab/dsse
+[dsse-envelope]: https://github.com/secure-systems-lab/dsse/blob/master/envelope.md
 [dsse-proto]: https://github.com/secure-systems-lab/dsse/blob/master/protocol.md
 [intoto-statement]: https://github.com/in-toto/attestation/blob/main/spec/v1/statement.md
 [intoto-rd]: https://github.com/in-toto/attestation/blob/main/spec/v1/resource_descriptor.md
 [sigstore-bundle]: https://docs.sigstore.dev/about/bundle/
+[sigstore-bundle-proto]: https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_bundle.proto
 [sigstore-proto]: https://github.com/sigstore/protobuf-specs
 [sigstore-common]: https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_common.proto
 [sigstore-rekor]: https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_rekor.proto
-[rfc2119]: https://www.rfc-editor.org/rfc/rfc2119
+[rfc-2119]: https://www.rfc-editor.org/rfc/rfc2119
+[rfc-4648]: https://www.rfc-editor.org/rfc/rfc4648 
