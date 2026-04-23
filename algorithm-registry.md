@@ -45,6 +45,5 @@ Fulcio instance and follows the
 ## History
 
 This registry was extracted from `spec.md` Section 4.2 and Section 7
-to follow the [Sigstore pattern](https://github.com/sigstore/architecture-docs/blob/main/algorithm-registry.md)
-of maintaining algorithm choices in a separate, independently versioned
+to maintain algorithm choices in a separate, independently versioned
 document.
