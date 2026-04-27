@@ -9,8 +9,7 @@
   "properties": {
     "resources": {
       "type": "array",
-      "minItems": 1,
-      "description": "File manifest. Each entry describes one file in the signing scope, per in-toto Resource Descriptor (https://github.com/in-toto/attestation/blob/main/spec/v1/resource_descriptor.md).",
+      "description": "File manifest. Each entry describes one file or byte range in the signing scope, per in-toto Resource Descriptor.",
       "items": {
         "$ref": "#/$defs/resource_descriptor"
       }
@@ -22,23 +21,23 @@
   "$defs": {
     "resource_descriptor": {
       "type": "object",
-      "description": "A single file entry in the model manifest.",
+      "description": "A single file or byte-range entry in the model manifest.",
       "required": ["name", "digest", "algorithm"],
       "properties": {
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "Relative path from the model root, using '/' as separator."
+          "description": "For 'files' method: relative POSIX path from the model root. For 'shards' method: 'path:start:end' where start is the inclusive byte offset and end is the exclusive byte offset."
         },
         "digest": {
           "type": "string",
           "pattern": "^[0-9a-f]+$",
-          "description": "Hex-encoded hash of the file contents."
+          "description": "Hex-encoded hash of the file or byte-range contents."
         },
         "algorithm": {
           "type": "string",
           "enum": ["sha256", "blake2b", "blake3"],
-          "description": "Hash algorithm used. See algorithm-registry.md."
+          "description": "Hash algorithm used to compute the digest."
         }
       },
       "additionalProperties": true
@@ -50,13 +49,18 @@
       "properties": {
         "method": {
           "type": "string",
-          "pattern": "^(files|file-shard-[1-9][0-9]*)$",
-          "description": "Serialization method. 'files' hashes each file as a whole. 'file-shard-<N>' splits files into N-byte shards. See spec.md §6.3."
+          "enum": ["files", "shards"],
+          "description": "Serialization method. 'files' hashes each file as a whole. 'shards' divides files into fixed-size byte ranges."
         },
         "hash_type": {
           "type": "string",
           "enum": ["sha256", "blake2b", "blake3"],
-          "description": "Hash algorithm used for all resource digests. See algorithm-registry.md."
+          "description": "Hash algorithm used for all resource digests."
+        },
+        "shard_size": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Shard size in bytes. Required when method is 'shards', must be absent when method is 'files'."
         },
         "allow_symlinks": {
           "type": "boolean",
@@ -70,6 +74,12 @@
           },
           "description": "Paths excluded from the signing scope."
         }
+      },
+      "if": {
+        "properties": { "method": { "const": "shards" } }
+      },
+      "then": {
+        "required": ["method", "hash_type", "allow_symlinks", "shard_size"]
       },
       "additionalProperties": false
     }

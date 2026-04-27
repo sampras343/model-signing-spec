@@ -213,8 +213,9 @@ canonicalization.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `method` | string | REQUIRED | Serialization method: `"files"` or `"file-shard-<N>"` (see [Section 6.3.1](#631-file-serialization) and [Section 6.3.2](#632-shard-serialization)). |
+| `method` | string | REQUIRED | Serialization method: `"files"` or `"shards"` (see [Section 6.3.1](#631-file-serialization) and [Section 6.3.2](#632-shard-serialization)). |
 | `hash_type` | string | REQUIRED | Hash algorithm used for file digests (see [Section 7](#7-hashing-algorithms)). |
+| `shard_size` | integer | CONDITIONAL | Shard size in bytes (positive integer). REQUIRED when `method` is `"shards"`, MUST be absent when `method` is `"files"`. |
 | `allow_symlinks` | boolean | REQUIRED | Whether symbolic links were followed during enumeration (see [Section 6.1.1](#611-symbolic-link-handling)). |
 | `ignore_paths` | array of string | OPTIONAL | Paths that were excluded from the signing scope (see [Section 6.2](#62-path-exclusion)). |
 
@@ -375,54 +376,70 @@ The resource descriptor fields are:
 - `digest`: the hex-encoded hash of the entire file contents.
 - `algorithm`: the hash algorithm identifier.
 
-#### 6.3.2. Shard Serialization (`"file-shard-<N>"`)
+#### 6.3.2. Shard Serialization (`"shards"`)
 
 For large files, each file MAY be split into consecutive fixed-size
-shards.  The method string encodes the shard size:
-`"file-shard-<N>"`, where `<N>` is the shard size in bytes as an ASCII
-decimal integer (e.g., `"file-shard-1048576"` for 1 MiB shards).
+byte ranges (shards).  When shard serialization is used, the
+`method` field MUST be set to `"shards"` and the `shard_size` field
+MUST be present as a positive integer indicating the size of each
+byte range in bytes (see [Section 5.2](#52-predicate-schema)).
 
 For each file in the enumeration:
 
-1. Split the file into consecutive shards of exactly N bytes.  The last
-   shard of a file MAY be smaller than N bytes.  An empty (0-byte)
-   file MUST produce exactly one shard (shard-0) whose digest is the
-   hash of the empty byte string.
-2. Compute the hash of each shard independently using `hash_type`.
-3. Produce one resource descriptor per shard.
+1. Divide the file contents into consecutive, non-overlapping byte
+   ranges.  Each range MUST be exactly the number of bytes specified
+   by `shard_size`, except the final range which MAY be shorter.
+   Files with zero bytes MUST be omitted from the `resources` array.
+2. Compute the digest of each byte range independently using the
+   algorithm specified by the `hash_type` field.
+3. Emit one resource descriptor per byte range.
 
-The resource descriptor fields for shard `i` (0-indexed) of file
-`<path>` are:
+Each resource descriptor MUST contain the following fields:
 
-- `name`: `"<path>:shard-<i>"` (e.g., `"weights.bin:shard-0"`).
-- `digest`: the hex-encoded hash of the shard's bytes.
-- `algorithm`: the hash algorithm identifier.
+- `name`: the relative POSIX path of the file, a colon, the
+  start byte offset (inclusive, decimal), a colon, and the
+  end byte offset (exclusive, decimal).
+  Format: `"<path>:<start>:<end>"`.
+- `digest`: the hex-encoded digest of that byte range.
+- `algorithm`: the same algorithm identifier as the `hash_type`
+  field in the `serialization` object.
 
 Note: because filenames may contain colon characters, parsers MUST
-identify the shard suffix by matching the *last* occurrence of the
-pattern `:shard-<i>` (where `<i>` is one or more ASCII digits) rather
-than splitting on the first colon.
+identify the byte-range suffix by matching the *last two*
+colon-separated decimal integer components rather than splitting on
+the first colon.
 
 **Default shard size:** Implementations SHOULD default to
-N = 1,048,576 (1 MiB) when shard serialization is selected.
+1,000,000,000 bytes (1 GB) when shard serialization is selected.
 
-**Example:** A 2,621,440-byte (2.5 MiB) file `weights.bin` with
-N = 1,048,576 produces three resource descriptors:
+**Example serialization object:**
 
 ```json
-{ "name": "weights.bin:shard-0", "algorithm": "sha256", "digest": "..." },
-{ "name": "weights.bin:shard-1", "algorithm": "sha256", "digest": "..." },
-{ "name": "weights.bin:shard-2", "algorithm": "sha256", "digest": "..." }
+{
+  "method": "shards",
+  "hash_type": "sha256",
+  "shard_size": 1048576,
+  "allow_symlinks": false
+}
 ```
 
-Shard-0 and shard-1 each cover 1,048,576 bytes; shard-2 covers the
-remaining 524,288 bytes.
+**Example:** A 2,621,440-byte (2.5 MiB) file `weights.bin` with a
+shard size of 1,048,576 produces three resource descriptors:
 
-**Verifier behavior:** The verifier MUST parse the shard size N from
-the `method` string and apply the same sharding when recomputing
-digests.  A verifier that does not implement shard serialization MUST
-reject the bundle with an informative error when encountering a
-`"file-shard-*"` method.
+```json
+{ "name": "weights.bin:0:1048576",       "algorithm": "sha256", "digest": "a1b2..." },
+{ "name": "weights.bin:1048576:2097152", "algorithm": "sha256", "digest": "c3d4..." },
+{ "name": "weights.bin:2097152:2621440", "algorithm": "sha256", "digest": "e5f6..." }
+```
+
+The first two ranges each cover 1,048,576 bytes; the third covers
+the remaining 524,288 bytes.
+
+**Verifier behavior:** The verifier MUST read the `shard_size` field
+from the `serialization` object and apply the same byte-range
+partitioning when recomputing digests.  A verifier that does not
+implement shard serialization MUST reject the bundle with an
+informative error when encountering a `method` value of `"shards"`.
 
 ### 6.4. Resource Descriptor Construction
 
@@ -577,23 +594,26 @@ Verify the model contents against the signed manifest:
 1. Read `serialization.method` to determine the serialization method
    (see [Section 6.3](#63-file-hashing-and-serialization)).
 2. Read `serialization.hash_type` to determine the hash algorithm.
-3. Read `serialization.ignore_paths` (if present) to determine excluded
+3. If `method` is `"shards"`, read `serialization.shard_size` to
+   determine the shard size in bytes.
+4. Read `serialization.ignore_paths` (if present) to determine excluded
    paths.
-4. Read `serialization.allow_symlinks` to determine the symlink policy
+5. Read `serialization.allow_symlinks` to determine the symlink policy
    (see [Section 6.1.1](#611-symbolic-link-handling)).
-5. Enumerate all files in the model directory per
+6. Enumerate all files in the model directory per
    [Section 6.1](#61-file-enumeration), applying the same exclusion
    rules and symlink policy.
-6. Hash each file (or shard) using the serialization method and hash
-   algorithm from steps 1–2.
-7. For each resource descriptor in `resources`:
-   - Verify that a file with the matching `name` exists in the model
-      (for shard resources, the file portion before `:shard-`).
+7. Hash each file (or byte range, for shard serialization) using the
+   serialization method and hash algorithm from steps 1–3.
+8. For each resource descriptor in `resources`:
+   - Verify that a corresponding file exists in the model (for shard
+     resources, extract the file path preceding the `:<start>:<end>`
+     suffix).
    - Verify that the computed hash matches `digest`.
-8. Verify that no files exist in the model that are not accounted for
+9. Verify that no files exist in the model that are not accounted for
    in `resources` (unless the `--ignore-unsigned-files` option is set).
 
-If any check in steps 4–5 fails, the verifier MUST report verification
+If any check in steps 5–6 fails, the verifier MUST report verification
 failure.
 
 ### 8.5. Unsigned File Handling
@@ -631,7 +651,7 @@ An implementation conforms to this specification if it:
    serialization method, and the `key` signing method.
 
 Implementations SHOULD additionally support shard serialization
-(`"file-shard-<N>"`) per
+(`"shards"`) per
 [Section 6.3.2](#632-shard-serialization).
 
 A verifier MAY additionally support the deprecated v0.1 predicate
