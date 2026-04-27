@@ -20,16 +20,19 @@ build-backend = "setuptools.build_meta"
 name = "oms-schemas"
 version = "1.0.0"
 description = "OMS JSON Schemas and validation for OpenSSF Model Signing bundles"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 dependencies = [
     "jsonschema>=4.20",
     "referencing>=0.31",
 ]
 
+[project.scripts]
+oms-validate = "oms_schemas.__main__:main"
+
 [tool.setuptools]
 packages = ["oms_schemas"]
 package-dir = {"oms_schemas" = "schemas"}
 
 [tool.setuptools.package-data]
-oms_schemas = ["*.json"]
+oms_schemas = ["v1.0/*.json"]

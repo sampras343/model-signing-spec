@@ -45,11 +45,4 @@ jobs:
         run: uv pip install --system -e .
 
       - name: Run schema validation
-        run: python test-vectors/validate.py
-
-      - name: Validate all schemas are valid JSON
-        run: |
-          for f in schemas/*.json; do
-            python -m json.tool "$f" > /dev/null || { echo "FAIL: $f is not valid JSON"; exit 1; }
-          done
-          echo "All schemas are valid JSON"
+        run: ./test-vectors/validate.sh

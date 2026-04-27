@@ -38,8 +38,8 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-SCHEMA_DIR: Path = Path(__file__).parent
-"""Path to the directory containing the OMS JSON Schema files."""
+SCHEMA_DIR: Path = Path(__file__).parent / "v1.0"
+"""Path to the directory containing the current OMS JSON Schema files."""
 
 DEPRECATED_PREDICATE_TYPE = "https://model_signing/Digests/v0.1"
 
@@ -111,7 +111,7 @@ def validate_bundle(bundle_path: Path, method: str | None = None) -> None:
     if statement.get("predicateType") == DEPRECATED_PREDICATE_TYPE:
         warnings.warn(
             f"Bundle uses deprecated predicateType {DEPRECATED_PREDICATE_TYPE!r}; "
-            f"skipping statement-level schema validation (see SPEC.md §11)",
+            f"skipping statement-level schema validation (see spec/v1.0.md §11)",
             stacklevel=2,
         )
     else:

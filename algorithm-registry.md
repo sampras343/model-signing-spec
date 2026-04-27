@@ -18,7 +18,7 @@ This file defines the cryptographic algorithms supported by OMS.
 
 Changes to this file MUST be reflected in the conformance test suite
 and in the `algorithm` / `hash_type` fields of the OMS predicate schema
-([`schemas/predicate.schema.json`](./schemas/predicate.schema.json)).
+([`schemas/v1.0/predicate.schema.json`](./schemas/v1.0/predicate.schema.json)).
 
 OMS relies on the [Sigstore Algorithm Registry](https://github.com/sigstore/architecture-docs/blob/main/algorithm-registry.md)
 for the signature algorithms used in the DSSE envelope.  This document
@@ -58,6 +58,6 @@ Fulcio instance and follows the
 
 ## History
 
-This registry was extracted from `spec.md` Section 4.2 and Section 7
+This registry was extracted from `spec/v1.0.md` Section 4.2 and Section 7
 to maintain algorithm choices in a separate, independently versioned
 document.

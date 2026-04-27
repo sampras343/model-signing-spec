@@ -23,7 +23,7 @@ Schema versions use [Semantic Versioning](https://semver.org/).
 ## [1.0.0]
 
 ### Added
-- Core specification (`SPEC.md`) — predicate type, predicate body,
+- Core specification (`spec/v1.0.md`) — predicate type, predicate body,
   canonicalization rules, signing and verification procedures.
 - Algorithm registry (`algorithm-registry.md`) — sha256 (required),
   blake2b (optional), blake3 (optional), EC P-256/P-384/P-521 key types.
