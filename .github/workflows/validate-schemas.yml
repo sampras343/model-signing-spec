@@ -41,8 +41,5 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install dependencies
-        run: uv pip install --system -e .
-
       - name: Run schema validation
-        run: ./test-vectors/validate.sh
+        run: uv run ./test-vectors/validate.sh

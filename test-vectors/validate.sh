@@ -39,12 +39,12 @@ for version_dir in "$SCRIPT_DIR"/v*/; do
     for f in "$version_dir"/valid/*.json; do
       [ -f "$f" ] || continue
       name="$(basename "$f")"
-      if oms-validate "$f" --schema-version "$version" > /dev/null 2>&1; then
+      if python -m oms_schemas "$f" --schema-version "$version" > /dev/null 2>&1; then
         echo "  PASS  $name"
-        ((passed++))
+        passed=$((passed + 1))
       else
         echo "  FAIL  $name: expected valid bundle to pass"
-        ((failed++))
+        failed=$((failed + 1))
       fi
     done
   fi
@@ -54,12 +54,12 @@ for version_dir in "$SCRIPT_DIR"/v*/; do
     for f in "$version_dir"/invalid/*.json; do
       [ -f "$f" ] || continue
       name="$(basename "$f")"
-      if oms-validate "$f" --schema-version "$version" > /dev/null 2>&1; then
+      if python -m oms_schemas "$f" --schema-version "$version" > /dev/null 2>&1; then
         echo "  FAIL  $name: expected rejection but validation passed"
-        ((failed++))
+        failed=$((failed + 1))
       else
         echo "  PASS  $name (correctly rejected)"
-        ((passed++))
+        passed=$((passed + 1))
       fi
     done
   fi
@@ -69,12 +69,12 @@ for version_dir in "$SCRIPT_DIR"/v*/; do
     for f in "$version_dir"/invalid-payload/*.json; do
       [ -f "$f" ] || continue
       name="$(basename "$f")"
-      if oms-validate "$f" --schema-version "$version" > /dev/null 2>&1; then
+      if python -m oms_schemas "$f" --schema-version "$version" > /dev/null 2>&1; then
         echo "  FAIL  $name: expected rejection but validation passed"
-        ((failed++))
+        failed=$((failed + 1))
       else
         echo "  PASS  $name (correctly rejected)"
-        ((passed++))
+        passed=$((passed + 1))
       fi
     done
   fi
