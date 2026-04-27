@@ -38,23 +38,43 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-SCHEMA_DIR: Path = Path(__file__).parent / "v1.0"
-"""Path to the directory containing the current OMS JSON Schema files."""
+PACKAGE_DIR: Path = Path(__file__).parent
+"""Root directory of the oms_schemas package."""
+
+DEFAULT_SCHEMA_VERSION = "v1.0"
 
 DEPRECATED_PREDICATE_TYPE = "https://model_signing/Digests/v0.1"
 
-_bundle_validator: Draft202012Validator | None = None
-_statement_validator: Draft202012Validator | None = None
+_validator_cache: dict[str, tuple[Draft202012Validator, Draft202012Validator]] = {}
 
 
-def _init_validators() -> tuple[Draft202012Validator, Draft202012Validator]:
-    """Load schemas and compile validators (cached after first call)."""
-    global _bundle_validator, _statement_validator
-    if _bundle_validator is not None and _statement_validator is not None:
-        return _bundle_validator, _statement_validator
+def _init_validators(
+    schema_version: str | None = None,
+) -> tuple[Draft202012Validator, Draft202012Validator]:
+    """Load schemas and compile validators for a given schema version.
+
+    Args:
+        schema_version: Schema directory name (e.g., ``"v1.0"``).
+            Defaults to :data:`DEFAULT_SCHEMA_VERSION`.
+
+    Returns:
+        A (bundle_validator, statement_validator) tuple.
+
+    Raises:
+        FileNotFoundError: If the schema version directory does not exist.
+    """
+    version = schema_version or DEFAULT_SCHEMA_VERSION
+    if version in _validator_cache:
+        return _validator_cache[version]
+
+    schema_dir = PACKAGE_DIR / version
+    if not schema_dir.is_dir():
+        raise FileNotFoundError(
+            f"Schema version directory not found: {schema_dir}"
+        )
 
     schemas: dict[str, Any] = {}
-    for f in SCHEMA_DIR.glob("*.json"):
+    for f in schema_dir.glob("*.json"):
         schemas[f.name] = json.loads(f.read_text())
 
     pairs = [
@@ -63,13 +83,14 @@ def _init_validators() -> tuple[Draft202012Validator, Draft202012Validator]:
     ]
     registry = Registry().with_resources(pairs)
 
-    _bundle_validator = Draft202012Validator(
+    bundle_v = Draft202012Validator(
         schemas["bundle.schema.json"], registry=registry
     )
-    _statement_validator = Draft202012Validator(
+    statement_v = Draft202012Validator(
         schemas["statement.schema.json"], registry=registry
     )
-    return _bundle_validator, _statement_validator
+    _validator_cache[version] = (bundle_v, statement_v)
+    return bundle_v, statement_v
 
 
 def decode_payload(bundle: dict[str, Any]) -> dict[str, Any]:
@@ -79,7 +100,11 @@ def decode_payload(bundle: dict[str, Any]) -> dict[str, Any]:
     return json.loads(base64.b64decode(padded))
 
 
-def validate_bundle(bundle_path: Path, method: str | None = None) -> None:
+def validate_bundle(
+    bundle_path: Path,
+    method: str | None = None,
+    schema_version: str | None = None,
+) -> None:
     """Validate an OMS bundle file against the spec schemas.
 
     Two-level validation:
@@ -94,13 +119,15 @@ def validate_bundle(bundle_path: Path, method: str | None = None) -> None:
         method: Signing method (``key``, ``certificate``, ``sigstore``).
             When provided, verifies that ``verificationMaterial`` contains
             the correct fields for that method.
+        schema_version: Schema version to validate against (e.g., ``"v1.0"``).
+            Defaults to the current version.
 
     Raises:
         jsonschema.ValidationError: If the bundle fails schema validation.
         json.JSONDecodeError: If the bundle is not valid JSON.
         AssertionError: If method-specific structural checks fail.
     """
-    bundle_v, statement_v = _init_validators()
+    bundle_v, statement_v = _init_validators(schema_version)
 
     raw = bundle_path.read_text()
     bundle = json.loads(raw)

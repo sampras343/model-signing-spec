@@ -15,9 +15,9 @@
 """CLI entry point for OMS bundle schema validation.
 
 Usage:
-    python -m oms_schemas bundle.sig
-    python -m oms_schemas bundle.sig --method key
-    oms-validate bundle.sig --method sigstore
+    oms-validate bundle.sig
+    oms-validate bundle.sig --method key
+    oms-validate bundle.sig --schema-version v1.0
 """
 
 from __future__ import annotations
@@ -48,6 +48,11 @@ def main() -> int:
         default=None,
         help="Signing method to verify structural constraints for.",
     )
+    parser.add_argument(
+        "--schema-version",
+        default=None,
+        help="Schema version to validate against (e.g., 'v1.0'). Defaults to the current version.",
+    )
     args = parser.parse_args()
 
     if not args.bundle.exists():
@@ -55,7 +60,7 @@ def main() -> int:
         return 1
 
     try:
-        validate_bundle(args.bundle, method=args.method)
+        validate_bundle(args.bundle, method=args.method, schema_version=args.schema_version)
     except (ValidationError, json.JSONDecodeError) as e:
         msg = e.message if hasattr(e, "message") else str(e)
         print(f"FAIL: {msg}", file=sys.stderr)

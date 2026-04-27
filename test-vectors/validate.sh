@@ -39,7 +39,7 @@ for version_dir in "$SCRIPT_DIR"/v*/; do
     for f in "$version_dir"/valid/*.json; do
       [ -f "$f" ] || continue
       name="$(basename "$f")"
-      if oms-validate "$f" > /dev/null 2>&1; then
+      if oms-validate "$f" --schema-version "$version" > /dev/null 2>&1; then
         echo "  PASS  $name"
         ((passed++))
       else
@@ -54,7 +54,7 @@ for version_dir in "$SCRIPT_DIR"/v*/; do
     for f in "$version_dir"/invalid/*.json; do
       [ -f "$f" ] || continue
       name="$(basename "$f")"
-      if oms-validate "$f" > /dev/null 2>&1; then
+      if oms-validate "$f" --schema-version "$version" > /dev/null 2>&1; then
         echo "  FAIL  $name: expected rejection but validation passed"
         ((failed++))
       else
@@ -69,7 +69,7 @@ for version_dir in "$SCRIPT_DIR"/v*/; do
     for f in "$version_dir"/invalid-payload/*.json; do
       [ -f "$f" ] || continue
       name="$(basename "$f")"
-      if oms-validate "$f" > /dev/null 2>&1; then
+      if oms-validate "$f" --schema-version "$version" > /dev/null 2>&1; then
         echo "  FAIL  $name: expected rejection but validation passed"
         ((failed++))
       else
