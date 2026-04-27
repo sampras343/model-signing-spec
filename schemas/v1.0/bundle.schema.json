@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://model_signing/bundle/v1.0/schema",
   "title": "OMS Bundle",
-  "description": "JSON Schema for a complete OMS bundle file (current format, v1.1.0+). An OMS bundle is a Sigstore Bundle containing a DSSE envelope with an OMS in-toto Statement.\n\nThis schema validates the CURRENT normative format. Older bundle versions (pre-v1.1.0) may not pass this schema; see spec.md §11 for version history and verifier relaxations.\n\nFields owned by Sigstore (verificationMaterial internals, tlogEntries, timestampVerificationData) are structurally validated here but their semantics are governed by:\n  - Sigstore Bundle:     https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_bundle.proto\n  - Sigstore Common:     https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_common.proto\n  - Sigstore Rekor:      https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_rekor.proto",
+  "description": "JSON Schema for a complete OMS bundle file (current format, v1.1.0+). An OMS bundle is a Sigstore Bundle containing a DSSE envelope with an OMS in-toto Statement.\n\nThis schema validates the CURRENT normative format. Older bundle versions (pre-v1.1.0) may not pass this schema; see spec/v1.0.md §11 for version history and verifier relaxations.\n\nFields owned by Sigstore (verificationMaterial internals, tlogEntries, timestampVerificationData) are structurally validated here but their semantics are governed by:\n  - Sigstore Bundle:     https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_bundle.proto\n  - Sigstore Common:     https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_common.proto\n  - Sigstore Rekor:      https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_rekor.proto",
   "type": "object",
   "required": ["mediaType", "verificationMaterial", "dsseEnvelope"],
   "properties": {
@@ -22,7 +22,7 @@
   "$defs": {
     "verification_material": {
       "type": "object",
-      "description": "Sigstore VerificationMaterial. Structure is defined by sigstore_bundle.proto#VerificationMaterial. Contents depend on the signing method (key, certificate, or sigstore). See spec.md §4.1.",
+      "description": "Sigstore VerificationMaterial. Structure is defined by sigstore_bundle.proto#VerificationMaterial. Contents depend on the signing method (key, certificate, or sigstore). See spec/v1.0.md §4.1.",
       "anyOf": [
         {
           "description": "Key-based signing: publicKey required. No Sigstore infrastructure involved, so tlogEntries and timestampVerificationData are not expected. Per sigstore_common.proto#PublicKeyIdentifier.",
