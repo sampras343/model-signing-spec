@@ -64,7 +64,7 @@
         },
         "allow_symlinks": {
           "type": "boolean",
-          "description": "Whether symbolic links were followed during file enumeration."
+          "description": "Whether symbolic links were followed during file enumeration. Support for true is expected to be removed in a future version."
         },
         "ignore_paths": {
           "type": "array",
