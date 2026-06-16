@@ -5,12 +5,19 @@
   "requires_ci": true,
   "sig_inside_model": true,
   "sign": {
-    "identity_token_env": "SIGSTORE_ID_TOKEN"
+    "identity_token_env": "SIGSTORE_ID_TOKEN",
+    "use_staging": true
   },
   "verify": {
     "identity": "${SIGSTORE_IDENTITY}",
-    "identity_provider": "https://token.actions.githubusercontent.com",
-    "ignore_paths": ["ignore-me"]
+    "identity_provider": "https://accounts.google.com",
+    "ignore_paths": [
+      "ignore-me"
+    ],
+    "use_staging": true
   },
-  "expected_signed_files": ["signme-1", "signme-2"]
+  "expected_signed_files": [
+    "signme-1",
+    "signme-2"
+  ]
 }
