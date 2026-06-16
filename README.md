@@ -127,6 +127,19 @@ The model signing approach is PKI-agnostic and supports the following methods:
 
 
 
+## **Conformance Suite**
+
+The [conformance suite](conformance/) provides 79 tests (31 roundtrip + 48 verify) for validating OMS client implementations against this specification. It is available as a reusable GitHub Action:
+
+```yaml
+- uses: sampras343/model-signing-spec/conformance@main
+  with:
+    entrypoint: path/to/your-adapter
+```
+
+See [conformance/README.md](conformance/README.md) for the full integration guide.
+
+
 ## **Get Involved**
 
 ### Meetings

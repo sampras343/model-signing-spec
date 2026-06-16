@@ -1,0 +1,15 @@
+{
+  "description": "Nested .gitignore inside a subdirectory must NOT be auto-excluded (§6.2.1 — default excludes match top-level only)",
+  "method": "key",
+  "model": "models/with-nested-gitignore",
+  "expected_signed_files": [
+    "model.bin",
+    "subdir/.gitignore"
+  ],
+  "sign": {
+    "private_key": "keys/certificate/signing-key.pem"
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
+}
