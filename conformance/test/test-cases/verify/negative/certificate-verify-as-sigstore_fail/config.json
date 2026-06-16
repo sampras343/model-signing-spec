@@ -1,0 +1,13 @@
+{
+  "description": "FAIL: Certificate-signed bundle must be rejected when verified with sigstore method (§4.1 — verification material type mismatch)",
+  "method": "sigstore",
+  "model": "models/simple",
+  "expect": "fail",
+  "verify": {
+    "identity": "test@example.com",
+    "identity_provider": "https://accounts.example.com",
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}

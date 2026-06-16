@@ -1,0 +1,12 @@
+{
+  "description": "FAIL: Rejection of bundle with wrong DSSE payloadType (not application/vnd.in-toto+json per §6.7)",
+  "method": "key",
+  "model": "models/simple",
+  "expect": "fail",
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem",
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}
