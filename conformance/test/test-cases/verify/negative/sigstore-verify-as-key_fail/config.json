@@ -5,7 +5,7 @@
   "model_relative_to": "test_dir",
   "expect": "fail",
   "verify": {
-    "public_key": "keys/ec-p256/signing-key-pub.pem",
+    "public_key": "keys/p256/signing-key-pub.pem",
     "ignore_paths": ["ignore-me"]
   }
 }
