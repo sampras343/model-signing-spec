@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: <build your adapter>
-      - uses: sampras343/model-signing-spec/conformance@main
+      - uses: ossf/model-signing-spec/conformance@main
         with:
           entrypoint: path/to/your-adapter
           xfail: |

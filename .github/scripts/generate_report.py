@@ -113,7 +113,7 @@ def generate_html(reports: dict[str, dict], output: Path) -> None:
   <h1>OMS Conformance Report</h1>
   <p class="subtitle">
     Conformance test results for OpenSSF Model Signing (OMS) language clients.
-    See <a href="https://github.com/sampras343/model-signing-spec/tree/main/conformance">conformance suite</a>
+    See <a href="https://github.com/ossf/model-signing-spec/tree/main/conformance">conformance suite</a>
     for the test suite and protocol specification.
   </p>
 
