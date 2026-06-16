@@ -9,7 +9,7 @@
   },
   "verify": {
     "identity": "${SIGSTORE_IDENTITY}",
-    "identity_provider": "https://accounts.google.com",
+    "identity_provider": "${SIGSTORE_ISSUER}",
     "use_staging": true
   }
 }

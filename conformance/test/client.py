@@ -276,7 +276,10 @@ class ModelSigningClient:
                     identity = os.environ.get(identity[2:-1], identity)
                 args += ["--identity", identity]
             if verify_block.identity_provider:
-                args += ["--identity-provider", verify_block.identity_provider]
+                idp = verify_block.identity_provider
+                if idp.startswith("${") and idp.endswith("}"):
+                    idp = os.environ.get(idp[2:-1], idp)
+                args += ["--identity-provider", idp]
             if verify_block.use_staging:
                 args += ["--use-staging"]
 
