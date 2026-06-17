@@ -1,0 +1,20 @@
+{
+  "description": "Keyless sigstore sign-then-verify on multi-file model with subdirectories (§4.1, §6.1, §6.1.2)",
+  "method": "sigstore",
+  "model": "models/multi-file",
+  "requires_ci": true,
+  "sign": {
+    "identity_token_env": "SIGSTORE_ID_TOKEN",
+    "use_staging": true
+  },
+  "verify": {
+    "identity": "${SIGSTORE_IDENTITY}",
+    "identity_provider": "${SIGSTORE_ISSUER}",
+    "use_staging": true
+  },
+  "expected_signed_files": [
+    "config.json",
+    "subdir/adapter.bin",
+    "weights.bin"
+  ]
+}

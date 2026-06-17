@@ -1,0 +1,22 @@
+{
+  "description": "Keyless sigstore sign-then-verify on simple model (§4.1 — requires CI OIDC token)",
+  "method": "sigstore",
+  "model": "models/simple",
+  "requires_ci": true,
+  "sign": {
+    "identity_token_env": "SIGSTORE_ID_TOKEN",
+    "use_staging": true
+  },
+  "verify": {
+    "identity": "${SIGSTORE_IDENTITY}",
+    "identity_provider": "${SIGSTORE_ISSUER}",
+    "ignore_paths": [
+      "ignore-me"
+    ],
+    "use_staging": true
+  },
+  "expected_signed_files": [
+    "signme-1",
+    "signme-2"
+  ]
+}

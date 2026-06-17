@@ -1,0 +1,39 @@
+name: Conformance Self-Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "conformance/**"
+      - "schemas/**"
+  pull_request:
+    paths:
+      - "conformance/**"
+      - "schemas/**"
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    name: Self-test with Python reference adapter
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Install model-signing (Python reference implementation)
+        run: pip install model-signing
+
+      - name: Make selftest-client executable
+        run: chmod +x conformance/selftest-client
+
+      - name: Run conformance suite
+        uses: ./conformance
+        with:
+          entrypoint: ${{ github.workspace }}/conformance/selftest-client
+          skip-result-upload: 'true'
+          xfail: |
+            test_roundtrip[key-empty-model-rejected

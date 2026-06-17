@@ -1,0 +1,15 @@
+{
+  "description": "Keyless sigstore sign-then-verify on a single-file model (§4.1, §6.1)",
+  "method": "sigstore",
+  "model": "models/single-file",
+  "requires_ci": true,
+  "sign": {
+    "identity_token_env": "SIGSTORE_ID_TOKEN",
+    "use_staging": true
+  },
+  "verify": {
+    "identity": "${SIGSTORE_IDENTITY}",
+    "identity_provider": "${SIGSTORE_ISSUER}",
+    "use_staging": true
+  }
+}
