@@ -1,0 +1,248 @@
+# Model fixture definitions for the conformance test suite.
+#
+# Each entry defines a model directory that generate_models.py materializes
+# at test time. Tests reference models by name (e.g., model: simple).
+#
+# File spec options:
+#   - content: "text"              UTF-8 text file
+#   - encoding: hex + hex_content  Binary from hex string
+#   - encoding: fill + fill_byte + size  N bytes of a single byte value
+#   - encoding: pattern + repeat   Named byte pattern (e.g., sequential-256)
+#   - {} or size: 0                Empty (zero-byte) file
+#   - unicode_normalization: NFC   Applied to the filename
+#
+# File type:
+#   - type: signed     File is included in the signing manifest (default)
+#   - type: ignored    File is excluded via --ignore-paths during signing
+#
+# config_loader.py derives expected_signed_files and ignore_paths from
+# file types, so tests don't need to repeat these lists.
+
+models:
+  - name: simple
+    files:
+      - path: signme-1
+        content: "signme-1\n"
+        type: signed
+      - path: signme-2
+        content: "signme-2"
+        type: signed
+      - path: ignore-me
+        size: 0
+        type: ignored
+
+  - name: single-file
+    files:
+      - path: model.bin
+        encoding: fill
+        fill_byte: "EF"
+        size: 256
+        type: signed
+
+  - name: multi-file
+    files:
+      - path: config.json
+        content: '{"model": "test", "version": "1.0"}'
+        type: signed
+      - path: weights.bin
+        encoding: fill
+        fill_byte: "AB"
+        size: 1024
+        type: signed
+      - path: subdir/adapter.bin
+        encoding: fill
+        fill_byte: "CD"
+        size: 512
+        type: signed
+
+  - name: binary-content
+    files:
+      - path: header.bin
+        encoding: hex
+        hex_content: "0001fffe000089504e47"
+        type: signed
+      - path: weights.bin
+        encoding: pattern
+        pattern: sequential-256
+        repeat: 4
+        type: signed
+
+  - name: empty
+    files:
+      - path: .gitignore
+        content: ".gitkeep\n"
+        type: signed
+
+  - name: with-dotfiles
+    files:
+      - path: .config
+        content: "config data"
+        type: signed
+      - path: .env.example
+        content: "env example"
+        type: signed
+      - path: model.bin
+        content: "model"
+        type: signed
+
+  - name: with-empty-file
+    files:
+      - path: empty.bin
+        size: 0
+        type: signed
+      - path: signme-1
+        content: "signme-1"
+        type: signed
+
+  - name: with-git-dir
+    files:
+      - path: .gitattributes
+        size: 0
+        type: signed
+      - path: .gitignore
+        size: 0
+        type: signed
+      - path: model.bin
+        content: "model data"
+        type: signed
+      - path: .git/HEAD
+        content: "git object"
+        type: ignored
+      - path: .github/ci.yml
+        content: "workflow"
+        type: signed
+
+  - name: hidden-subdir
+    files:
+      - path: model.bin
+        content: "main model"
+        type: signed
+      - path: .cache/weights.bin
+        content: "cached weights"
+        type: signed
+      - path: .local/share/data.bin
+        content: "local data"
+        type: signed
+
+  - name: with-nested-gitignore
+    files:
+      - path: model.bin
+        content: "model content\n"
+        type: signed
+      - path: subdir/.gitignore
+        content: "nested gitignore\n"
+        type: signed
+
+  - name: with-nested-ignore
+    files:
+      - path: ignore-me
+        content: "top-level ignore\n"
+        type: ignored
+      - path: signme-1
+        content: "signme content\n"
+        type: signed
+      - path: subdir/ignore-me
+        content: "nested ignore\n"
+        type: ignored
+
+  - name: unicode-names
+    files:
+      - path: weights.bin
+        content: "weights"
+        type: signed
+      - path: "模型.bin"
+        content: "model data"
+        unicode_normalization: NFC
+        type: signed
+
+  - name: special-chars
+    files:
+      - path: "file (copy).bin"
+        content: "file1"
+        type: signed
+      - path: normal.bin
+        content: "file3"
+        type: signed
+      - path: "path with spaces/model.bin"
+        content: "file2"
+        type: signed
+
+  - name: deeply-nested
+    files:
+      - path: a/very/deep/directory/tree/weights.bin
+        content: "deep weights"
+        type: signed
+
+  - name: deeply-nested-with-git
+    files:
+      - path: a/very/deep/directory/tree/weights.bin
+        content: "deep weights"
+        type: signed
+      - path: .git/HEAD
+        content: "git object"
+        type: ignored
+
+  - name: multi-git-dirs
+    files:
+      - path: model.bin
+        content: "main model"
+        type: signed
+      - path: .git/HEAD
+        content: "git root"
+        type: ignored
+      - path: submodule/model.bin
+        content: "sub model"
+        type: signed
+      - path: submodule/.git/HEAD
+        content: "git sub"
+        type: ignored
+
+  - name: multi-gitignore
+    files:
+      - path: model.bin
+        content: "main model"
+        type: signed
+      - path: .gitignore
+        size: 0
+        type: ignored
+      - path: subdir/data.bin
+        content: "sub data"
+        type: signed
+      - path: subdir/.gitignore
+        content: "nested gitignore"
+        type: ignored
+
+  - name: with-git-and-ignore
+    files:
+      - path: model.bin
+        content: "model"
+        type: signed
+      - path: .git/HEAD
+        content: "git object"
+        type: ignored
+      - path: .gitignore
+        size: 0
+        type: ignored
+      - path: .gitattributes
+        size: 0
+        type: ignored
+      - path: ignored-file.tmp
+        content: "should be ignored"
+        type: ignored
+
+  - name: with-assets-subdir
+    files:
+      - path: weights.bin
+        content: "weights"
+        type: signed
+      - path: config.json
+        content: '{"version": "1.0"}'
+        type: signed
+      - path: assets/vocab.txt
+        content: "vocabulary data"
+        type: signed
+      - path: assets/tokenizer.bin
+        encoding: fill
+        fill_byte: "AA"
+        size: 128
+        type: signed

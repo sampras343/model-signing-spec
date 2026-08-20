@@ -1,0 +1,5 @@
+# Regenerable bundles -- generated at test time by generate_bundles.py.
+# Go-interop bundles are committed (require Go binary to regenerate).
+*/bundle.sig
+!key-simple-go/bundle.sig
+!certificate-simple-go/bundle.sig

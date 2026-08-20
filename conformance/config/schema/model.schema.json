@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "model.schema.json",
+  "title": "Model definitions for conformance test suite",
+  "type": "object",
+  "required": ["models"],
+  "properties": {
+    "models": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/model" }
+    }
+  },
+  "$defs": {
+    "model": {
+      "type": "object",
+      "required": ["name", "files"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "files": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/file_spec" }
+        }
+      }
+    },
+    "file_spec": {
+      "type": "object",
+      "required": ["path"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "content": { "type": "string" },
+        "encoding": { "enum": ["hex", "fill", "pattern"] },
+        "hex_content": { "type": "string", "pattern": "^[0-9a-fA-F]*$" },
+        "fill_byte": { "type": "string", "pattern": "^[0-9a-fA-F]{2}$" },
+        "pattern": { "enum": ["sequential-256"] },
+        "repeat": { "type": "integer", "minimum": 1 },
+        "size": { "type": "integer", "minimum": 0 },
+        "unicode_normalization": { "enum": ["NFC", "NFD", "NFKC", "NFKD"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "encoding": { "const": "hex" } } },
+          "then": { "required": ["hex_content"] }
+        },
+        {
+          "if": { "properties": { "encoding": { "const": "fill" } } },
+          "then": { "required": ["fill_byte", "size"] }
+        },
+        {
+          "if": { "properties": { "encoding": { "const": "pattern" } } },
+          "then": { "required": ["pattern", "repeat"] }
+        }
+      ]
+    }
+  }
+}

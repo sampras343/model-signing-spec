@@ -1,0 +1,224 @@
+# Historical tests — verify pre-signed bundles from older releases and Go client.
+# Bundles are downloaded from a cosign-verified OCI artifact (see fixtures.yaml).
+# These cannot be regenerated (signed with specific binary versions or expired OIDC).
+
+description: Backwards compatibility and cross-implementation verification tests
+defaults:
+  model_relative_to: test_dir
+  keys_relative_to: test_dir
+method_defaults:
+  key:
+    verify:
+      public_key: verify-material/signing-key-pub.pem
+  certificate:
+    verify:
+      cert_chain:
+      - verify-material/ca-cert.pem
+  sigstore:
+    requires_ci: true
+    verify:
+      identity: stefanb@us.ibm.com
+      identity_provider: https://sigstore.verify.ibm.com/oauth2
+tests:
+- id: go-interop-certificate
+  description: 'Go-signed certificate-based verification (cross-client interop: Go
+    signs, test client verifies)'
+  spec_refs:
+  - §4.1
+  - §11
+  method: certificate
+  model: simple
+  model_relative_to: assets
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  verify:
+    cert_chain:
+    - verify-material/ca-cert.pem
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download
+- id: go-interop-key
+  description: 'Go-signed key-based verification (cross-client interop: Go signs,
+    test client verifies)'
+  spec_refs:
+  - §4.1
+  - §11
+  method: key
+  model: simple
+  model_relative_to: assets
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  verify:
+    public_key: verify-material/signing-key-pub.pem
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download
+- id: historical-v0.2.0-certificate
+  description: 'Backwards compatibility: certificate-signed bundle from Go v0.2.0'
+  spec_refs:
+  - §5.1
+  - §11
+  method: certificate
+  model: model
+  bundle_source:
+    type: download
+- id: historical-v0.3.1-certificate
+  description: 'Backwards compatibility: certificate-signed bundle from Go v0.3.1'
+  spec_refs:
+  - §11
+  method: certificate
+  model: model
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  bundle_source:
+    type: download
+- id: historical-v0.3.1-elliptic-key
+  description: 'Backwards compatibility: key-signed (EC) bundle from Go v0.3.1'
+  spec_refs:
+  - §11
+  method: key
+  model: model/signme-1
+  expected_signed_files:
+  - .
+  bundle_source:
+    type: download
+- id: historical-v0.3.1-sigstore
+  description: 'Backwards compatibility: sigstore-signed bundle from Go v0.3.1'
+  spec_refs:
+  - §4.1
+  - §11
+  method: sigstore
+  model: model
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  bundle_source:
+    type: download
+- id: historical-v1.0.0-certificate
+  description: 'Backwards compatibility: certificate-signed bundle from Go v1.0.0'
+  spec_refs:
+  - §11
+  method: certificate
+  model: model
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  bundle_source:
+    type: download
+- id: historical-v1.0.0-elliptic-key
+  description: 'Backwards compatibility: key-signed bundle from Go v1.0.0'
+  spec_refs:
+  - §11
+  method: key
+  model: model/signme-1
+  expected_signed_files:
+  - .
+  bundle_source:
+    type: download
+- id: historical-v1.0.0-sigstore
+  description: 'Backwards compatibility: sigstore-signed bundle from Go v1.0.0'
+  spec_refs:
+  - §4.1
+  - §11
+  method: sigstore
+  model: model
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  bundle_source:
+    type: download
+- id: historical-v1.0.1-certificate
+  description: 'Backwards compatibility: certificate-signed bundle from Go v1.0.1'
+  spec_refs:
+  - §6.2
+  - §11
+  method: certificate
+  model: model
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  verify:
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download
+- id: historical-v1.0.1-elliptic-key
+  description: 'Backwards compatibility: key-signed bundle from Go v1.0.1'
+  spec_refs:
+  - §6.2
+  - §11
+  method: key
+  model: model
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  verify:
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download
+- id: historical-v1.0.1-sigstore
+  description: 'Backwards compatibility: sigstore-signed bundle from Go v1.0.1'
+  spec_refs:
+  - §4.1
+  - §11
+  method: sigstore
+  model: model
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  verify:
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download
+- id: historical-v1.1.0-certificate
+  description: 'Backwards compatibility: certificate-signed bundle from Go v1.1.0'
+  spec_refs:
+  - §6.2
+  - §11
+  method: certificate
+  model: model
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  verify:
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download
+- id: historical-v1.1.0-elliptic-key
+  description: 'Backwards compatibility: key-signed bundle from Go v1.1.0'
+  spec_refs:
+  - §6.2
+  - §11
+  method: key
+  model: model
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  verify:
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download
+- id: historical-v1.1.0-sigstore
+  description: 'Backwards compatibility: sigstore-signed bundle from Go v1.1.0'
+  spec_refs:
+  - §4.1
+  - §11
+  method: sigstore
+  model: model
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  verify:
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download

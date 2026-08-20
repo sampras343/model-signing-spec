@@ -1,6 +1,6 @@
 # Conformance test cases
 
-**79 tests** total: **31 roundtrip** (live sign, then verify) and **48 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in the [OMS Specification](https://github.com/ossf/model-signing-spec/blob/main/spec/v1.0.md); section references below use the same numbering as that spec.
+**86 tests** total: **37 roundtrip** (live sign, then verify) and **49 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in the [OMS Specification](https://github.com/ossf/model-signing-spec/blob/main/spec/v1.0.md); section references below use the same numbering as that spec.
 
 **oms-schemas:** Every successful roundtrip run validates produced bundles and decoded DSSE payloads against the published OMS JSON Schemas from the `oms-schemas` package (outer bundle, statement, predicate, resources), in addition to the test harness’s own structural checks.
 
@@ -18,6 +18,7 @@
 | §4.1 | Accept hint or rawBytes in publicKey | historical-v0.3.1/v1.0.0 (rawBytes) vs v1.1.0 (hint) | Covered |
 | §4.1 | Accept keyid absent/empty/null | Go vs Python bundles | Covered |
 | §4.1 | Certificate validity period enforced | certificate-expired_fail | Covered |
+| §4.1 | Certificate must have code_signing EKU | certificate-no-code-signing-eku_fail | Covered |
 | §4.1 | Method-specific verificationMaterial match | key-verify-as-certificate_fail, certificate-verify-as-key_fail, sigstore-verify-as-key_fail, key-verify-as-sigstore_fail, certificate-verify-as-sigstore_fail | Covered |
 | §4.1 | Producers MUST use hint field in publicKey | _assert_key_uses_hint (all key roundtrip) | Covered |
 | §4.2 | EC P-256 key support | key-p256 | Covered |
@@ -30,7 +31,7 @@
 | §5.2.1 | Only regular files, no directory entries | Implicit in all tests | Covered |
 | §5.2.2 | serialization required fields | Schema validation, key-simple-missing-serialization_fail | Covered |
 | §5.2.2 | shard_size MUST be absent when method is files | _assert_no_shard_size_for_files (all roundtrip) | Covered |
-| §6.1 | Recursive file enumeration | key-multi-file | Covered |
+| §6.1 | Recursive file enumeration | key-multi-file, key-deeply-nested, key-assets-subdir | Covered |
 | §6.1 | Model MUST have ≥1 file after exclusions | key-empty-model-rejected | Covered |
 | §6.1.1 | Symlink rejected by default (allow_symlinks=false) | key-symlink-default-rejected | Covered |
 | §6.1.1 | Out-of-root symlink MUST error | key-symlink-outside-root | Covered |
@@ -41,13 +42,13 @@
 | §6.1.2 | Case-sensitive comparison | Implicit | Covered |
 | §6.1.2 | Path canonicalization (no /, ../, ./, //, trailing /) | _assert_paths_canonical (all roundtrip) | Covered |
 | §6.1.2 | UTF-8 filenames | key-unicode-filename | Covered |
-| §6.2 | Default git path exclusions | key-default-ignores | Covered |
+| §6.2 | Default git path exclusions | key-default-ignores, key-deeply-nested-with-git, key-multi-git-dirs, key-multi-gitignore, key-git-and-ignore-combined | Covered |
 | §6.2 | Non-git dotfiles NOT excluded | key-dotfile-included | Covered |
 | §6.2 | Hidden subdirectories NOT excluded | key-files-in-hidden-dir | Covered |
 | §6.2 | User --ignore-paths | key-ignore-paths | Covered |
 | §6.2 | Signature file auto-exclusion | key-sig-inside-model | Covered |
-| §6.2.1 | Top-level matching for default excludes | key-default-ignores, key-nested-git-not-excluded | Covered |
-| §6.2.1 | Nested git-pattern NOT auto-excluded | key-nested-git-not-excluded | Covered |
+| §6.2 | Nested git-pattern NOT auto-excluded | key-nested-git-not-excluded | Covered |
+| §6.2.1 | Top-level matching for default excludes | key-default-ignores, key-multi-git-dirs, key-multi-gitignore | Covered |
 | §6.2.1 | Exact relative path for user ignores | key-ignore-paths, key-ignore-paths-exact-match | Covered |
 | §6.2.1 | User ignore path depth semantics | key-ignore-paths-exact-match | Covered |
 | §6.3.1 | File serialization (files method) | All roundtrip tests | Covered |
@@ -85,7 +86,7 @@
 
 Paths are under `test/test-cases/verify/…` unless noted. “Verify” means the client checks a pre-built bundle and model without signing in that run.
 
-### Positive cases (8)
+### Positive cases (6)
 
 #### `key-simple`
 **Spec:** §4.1, §6.2, §8.1–§8.4
@@ -165,33 +166,33 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 
 **Impact if it fails:** Teams cannot deploy signed models into directories with extra runtime artifacts without false verification failures.
 
-#### `key-simple-go`
-**Spec:** §4.1, §11 (cross-client interop)
+### Historical cases (15)
 
-**What it tests:** That a bundle produced by the Go implementation (key method) verifies successfully with the client under test, using the same logical model and key material as the baseline `key-simple` case.
+#### `go-interop-key`
+**Spec:** §4.1, §11
 
-**Setup:** A Go-generated bundle for the simple model; same key relationship as `key-simple`.
+**What it tests:** That a bundle produced by the Go implementation (key method) verifies successfully with the client under test.
 
-**Why it exists:** The ecosystem includes multiple signers; verification must be interoperable across implementations and languages.
+**Setup:** A Go-generated bundle for the simple model downloaded from OCI fixtures; same key relationship as `key-simple`.
+
+**Why it exists:** Verification must be interoperable across implementations and languages.
 
 **Expected outcome:** Exit code 0.
 
-**Impact if it fails:** Cross-language, key-based interoperability is broken (Go-signed bundles not accepted by this client).
+**Impact if it fails:** Cross-language, key-based interoperability is broken.
 
-#### `certificate-simple-go`
-**Spec:** §4.1, §11 (cross-client interop)
+#### `go-interop-certificate`
+**Spec:** §4.1, §11
 
 **What it tests:** That a Go-produced certificate-method bundle verifies successfully with the client under test.
 
-**Setup:** A committed Go-generated certificate bundle and matching model and trust configuration.
+**Setup:** A Go-generated certificate bundle downloaded from OCI fixtures with matching trust configuration.
 
-**Why it exists:** Certificate signing must work across toolchains, not only for bundles created by a single language.
+**Why it exists:** Certificate signing must work across toolchains.
 
 **Expected outcome:** Exit code 0.
 
 **Impact if it fails:** Cross-language certificate interoperability is broken.
-
-### Historical cases (13)
 
 > **Note:** Historical bundles may not match every detail of the current OMS JSON Schema. Known differences include: `tlogEntries` may be optional for key/certificate material in older bundles, `keyid` may be null in bundles produced before v1.1.0, and v0.2.0 uses a deprecated `predicateType`. The suite still requires these to verify when marked pass.
 
@@ -364,7 +365,7 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 
 **Impact if it fails:** Latest sigstore bundles from Go v1.1.0 are unverifiable.
 
-### Negative cases (27)
+### Negative cases (28)
 
 #### `key-simple-tampered-content_fail`
 **Spec:** §8.4
@@ -521,6 +522,19 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 **Expected outcome:** Non-zero exit; signature or payload check must fail.
 
 **Impact if it fails:** Wrong semantic types could be smuggled as if they were OMS model statements.
+
+#### `certificate-no-code-signing-eku_fail`
+**Spec:** §4.1
+
+**What it tests:** That a certificate without the `code_signing` Extended Key Usage (EKU) extension is rejected during certificate-method signing or verification.
+
+**Setup:** Signs the simple model using a leaf certificate issued by the standard intermediate CA but without the `code_signing` EKU. The certificate is valid and properly chained — only the EKU is missing.
+
+**Why it exists:** The OMS spec requires certificates used for signing to have the `code_signing` EKU. Accepting a certificate without it would allow arbitrary certificates to produce valid signatures.
+
+**Expected outcome:** Non-zero exit code (signing or verification rejected).
+
+**Impact if it fails:** Clients accept signatures from certificates not authorized for code signing, undermining the PKI trust model.
 
 #### `certificate-expired_fail`
 **Spec:** §4.1, §8.2
@@ -719,7 +733,7 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 
 ---
 
-## Category 2: Roundtrip tests (31)
+## Category 2: Roundtrip tests (37)
 
 Paths are under `test/test-cases/roundtrip/`. Each case signs a model copy, then verifies it using the test harness, exercising live crypto and I/O.
 
@@ -803,6 +817,19 @@ Paths are under `test/test-cases/roundtrip/`. Each case signs a model copy, then
 
 **Impact if it fails:** Single-file models (many ML artifact formats) cannot be roundtripped.
 
+#### `key-git-and-ignore-combined`
+**Spec:** §6.2
+
+**What it tests:** Full combination of `.git`, `.gitignore`, `.gitattributes`, and user-specified ignore paths in a single model.
+
+**Setup:** `models/with-git-and-ignore` with `model.bin` signed, plus `.git/HEAD`, `.gitignore`, `.gitattributes`, and `ignored-file.tmp` all excluded.
+
+**Why it exists:** Real repositories often contain multiple types of excluded paths simultaneously; this tests that all exclusion mechanisms compose correctly without interference.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** Combined git-related and user-specified exclusions would interfere with each other, causing files to be incorrectly included or excluded.
+
 #### `key-ignore-paths`
 **Spec:** §6.2, §6.2.1
 
@@ -828,6 +855,32 @@ Paths are under `test/test-cases/roundtrip/`. Each case signs a model copy, then
 **Expected outcome:** Exit code 0 with the extra file present on disk.
 
 **Impact if it fails:** Deployment and lifecycle patterns that rely on lenient post-sign directories cannot be supported.
+
+#### `key-deeply-nested`
+**Spec:** §6.1, §6.1.2
+
+**What it tests:** Key roundtrip on a model where files are stored in a deeply nested directory structure (`a/very/deep/directory/tree/`).
+
+**Setup:** `models/deeply-nested` with a single signed file at five levels of nesting.
+
+**Why it exists:** Implementations must correctly enumerate and canonicalize paths through arbitrarily deep directory trees, not just one or two levels.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** Models with deeply nested directory structures would fail signing or verification due to path enumeration or canonicalization errors.
+
+#### `key-deeply-nested-with-git`
+**Spec:** §6.2
+
+**What it tests:** That `.git` at the model root is excluded even when signed files are deeply nested in subdirectories.
+
+**Setup:** `models/deeply-nested-with-git` with a deeply nested signed file and `.git/HEAD` at the root.
+
+**Why it exists:** Validates that default git exclusions apply correctly regardless of how deep the actual model files are stored.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** Default git exclusions might not apply when model files are deeply nested, causing `.git` contents to appear in the manifest.
 
 #### `key-default-ignores`
 **Spec:** §6.2
@@ -880,6 +933,19 @@ Paths are under `test/test-cases/roundtrip/`. Each case signs a model copy, then
 **Expected outcome:** Exit code 0.
 
 **Impact if it fails:** Hashing of empty or sparse models could be wrong, breaking manifest equality with other signers.
+
+#### `key-assets-subdir`
+**Spec:** §6.1
+
+**What it tests:** Recursive file enumeration through a model with an `assets/` subdirectory containing additional files.
+
+**Setup:** `models/with-assets-subdir` with `weights.bin`, `config.json`, `assets/vocab.txt`, and `assets/tokenizer.bin`.
+
+**Why it exists:** Real models often include asset subdirectories with vocabulary files, tokenizers, or other supporting data that must be recursively enumerated and signed.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** Models with asset subdirectories would not be correctly enumerated, leaving supporting files unsigned.
 
 #### `key-binary-content`
 **Spec:** §6.3.1
@@ -959,8 +1025,34 @@ Paths are under `test/test-cases/roundtrip/`. Each case signs a model copy, then
 
 **Impact if it fails:** The implementation is **non-compliant** for the most widely used elliptic curve.
 
+#### `key-multi-git-dirs`
+**Spec:** §6.2, §6.2.1
+
+**What it tests:** Multiple `.git` directories at various levels (root and inside a submodule directory) are all correctly excluded from the signed manifest.
+
+**Setup:** `models/multi-git-dirs` with `model.bin` and `submodule/model.bin` signed, plus `.git/HEAD` and `submodule/.git/HEAD` excluded.
+
+**Why it exists:** Nested repositories and submodules create multiple `.git` directories; the implementation must handle exclusions at every level, not just the root.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** `.git` directories inside nested submodules would leak into the signed manifest, breaking verification in repositories with submodules.
+
+#### `key-multi-gitignore`
+**Spec:** §6.2, §6.2.1
+
+**What it tests:** Multiple `.gitignore` files at various levels (root and inside subdirectories) are all correctly excluded from the signed manifest.
+
+**Setup:** `models/multi-gitignore` with `model.bin` and `subdir/data.bin` signed, plus `.gitignore` at the root and `subdir/.gitignore` excluded.
+
+**Why it exists:** Projects often have `.gitignore` files at multiple directory levels; the implementation must handle exclusions for all of them consistently.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** `.gitignore` files at non-root levels would appear in the signed manifest, causing verification mismatches when those files are absent or changed.
+
 #### `key-nested-git-not-excluded`
-**Spec:** §6.2.1
+**Spec:** §6.2
 
 **What it tests:** A `.gitignore` file inside a **subdirectory** (e.g. `subdir/.gitignore`) is **not** auto-excluded by the default ignore list. Default exclusions match only top-level path components.
 
@@ -1202,9 +1294,9 @@ Example (abbreviated):
 
 | Category | Count |
 |---|---|
-| Verify - positive | 8 |
-| Verify - negative | 27 |
-| Verify - historical | 13 |
-| Roundtrip | 31 |
-| **Total** | **79** |
+| Verify - positive | 6 |
+| Verify - negative | 28 |
+| Verify - historical | 15 |
+| Roundtrip | 37 |
+| **Total** | **86** |
 

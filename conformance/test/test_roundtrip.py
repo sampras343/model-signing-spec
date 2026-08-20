@@ -1,8 +1,8 @@
 """Sign-then-verify round-trip tests.
 
-Each subdirectory in test/test-cases/roundtrip/ is one test case with a
-``config.json`` that specifies the method, model, key material, and expected
-outcomes.  Shared assets (models, keys) live in test/assets/.
+Test cases are defined in ``roundtrip.yaml``.  Each entry specifies the
+method, model, key material, and expected outcomes.  Shared assets (models,
+keys) live in ``test/assets/``.
 
 These tests require signing capability and are skipped when ``--skip-signing`` is passed.
 """
@@ -11,18 +11,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 from pathlib import Path
 
 import pytest
 
-from .client import ModelSigningClient, CaseConfig, _read_identity_token
+from .client import ModelSigningClient, CaseConfig, sigstore_token_available
 from .schema_validator import validate_bundle, decode_payload
-
-
-def _sigstore_token_available() -> bool:
-    return bool(_read_identity_token("SIGSTORE_ID_TOKEN"))
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -183,23 +178,19 @@ def _assert_predicate_type(bundle_path: Path) -> None:
 
 @pytest.mark.signing
 def test_roundtrip(
-    client: ModelSigningClient, roundtrip_dir: Path, tmp_path: Path,
+    client: ModelSigningClient, roundtrip_cfg: CaseConfig, tmp_path: Path,
     request: pytest.FixtureRequest,
 ) -> None:
     """Sign a model then verify the produced bundle with the same client."""
-    config_path = roundtrip_dir / "config.json"
-    if not config_path.exists():
-        pytest.fail(f"Missing config.json in {roundtrip_dir}")
-
-    cfg = CaseConfig.from_json(config_path)
-    label = f"{roundtrip_dir.name}: {cfg.description}"
+    cfg = roundtrip_cfg
+    label = f"{cfg.id}: {cfg.description}"
 
     if cfg.method == "sigstore" and request.config.getoption("--skip-sigstore"):
         pytest.skip(f"[{label}] skipped (--skip-sigstore)")
-    if cfg.requires_ci and not _sigstore_token_available():
+    if cfg.requires_ci and not sigstore_token_available():
         pytest.skip(f"[{label}] requires OIDC token (set SIGSTORE_ID_TOKEN or SIGSTORE_ID_TOKEN_FILE)")
 
-    model_src = ASSETS / cfg.model
+    model_src = ASSETS / "models" / cfg.model
     if not model_src.exists():
         pytest.fail(f"Model directory not found: {model_src}")
 
@@ -272,7 +263,7 @@ def test_roundtrip(
             f"  actual:   {actual}"
         )
 
-    if "deterministic" in roundtrip_dir.name:
+    if "deterministic" in cfg.id:
         bundle_path2 = tmp_path / "bundle2.sig"
         sign_result2 = client.sign(
             method=cfg.method,

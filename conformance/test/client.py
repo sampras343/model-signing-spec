@@ -10,8 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Optional
 
-_VALID_EXPECT = ("pass", "fail")
-_VALID_RELATIVE_TO = ("assets", "test_dir")
+
 
 _SHARD_SUFFIX_RE = re.compile(r":\d+:\d+$")
 
@@ -37,8 +36,11 @@ def _read_identity_token(env_name: str) -> str:
     return ""
 
 
-class ConfigError(Exception):
-    """Raised when a test config.json is invalid."""
+def sigstore_token_available() -> bool:
+    """Return True if a Sigstore OIDC token is available."""
+    return bool(_read_identity_token("SIGSTORE_ID_TOKEN"))
+
+
 
 
 @dataclass
@@ -60,16 +62,27 @@ class ModelModifications:
 
     def apply(self, model_dir: Path) -> None:
         """Apply modifications to a model directory."""
+        resolved_root = model_dir.resolve()
         for filename, content in self.tamper.items():
-            (model_dir / filename).write_text(content)
+            target = model_dir / filename
+            if not target.resolve().is_relative_to(resolved_root):
+                raise ValueError(f"Path traversal blocked: {filename}")
+            target.write_text(content)
         for filename in self.delete:
             path = model_dir / filename
+            if not path.resolve().is_relative_to(resolved_root):
+                raise ValueError(f"Path traversal blocked: {filename}")
             if path.exists():
                 path.unlink()
         for filename, content in self.inject.items():
-            (model_dir / filename).write_text(content)
+            target = model_dir / filename
+            if not target.resolve().is_relative_to(resolved_root):
+                raise ValueError(f"Path traversal blocked: {filename}")
+            target.write_text(content)
         for name, target in self.symlinks.items():
             link = model_dir / name
+            if not link.resolve().parent.is_relative_to(resolved_root):
+                raise ValueError(f"Path traversal blocked: {name}")
             link.parent.mkdir(parents=True, exist_ok=True)
             link.symlink_to(target)
 
@@ -121,10 +134,12 @@ class VerifyBlock:
 @dataclass
 class CaseConfig:
     """Unified test configuration for both verify and roundtrip tests."""
+    id: str
     description: str
     method: str
     model: str
     model_relative_to: Literal["assets", "test_dir"] = "assets"
+    keys_relative_to: Literal["assets", "test_dir"] = "assets"
     expect: Literal["pass", "fail"] = "pass"
     sig_inside_model: bool = False
     requires_ci: bool = False
@@ -132,58 +147,79 @@ class CaseConfig:
     verify: Optional[VerifyBlock] = None
     expected_signed_files: Optional[list[str]] = None
     model_modifications: Optional[ModelModifications] = None
+    test_dir: Optional[str] = None
+    key_group: Optional[str] = None
+    verify_key_group: Optional[str] = None
 
     @classmethod
-    def from_json(cls, path: Path) -> "CaseConfig":
-        data = json.loads(path.read_text())
-        cls._validate_raw(data, path)
+    def from_suite_entry(
+        cls,
+        entry: dict,
+        cat_defaults: dict,
+        method_defaults: dict,
+    ) -> "CaseConfig":
+        """Build a CaseConfig from a YAML test entry with defaults.
 
-        sign_block = None
-        if "sign" in data:
-            sign_block = SignBlock.from_dict(data["sign"])
+        Merges configuration in three layers (most specific wins):
+          category defaults < method defaults < test entry
+        """
+        # Merge sign blocks: method_defaults.sign < entry.sign
+        sign_data: dict = {}
+        if "sign" in method_defaults:
+            sign_data.update(method_defaults["sign"])
+        if "sign" in entry:
+            sign_data.update(entry["sign"])
+        sign_block = SignBlock.from_dict(sign_data) if sign_data else None
 
-        verify_block = None
-        if "verify" in data:
-            verify_block = VerifyBlock.from_dict(data["verify"])
+        # Merge verify blocks: method_defaults.verify < entry.verify
+        verify_data: dict = {}
+        if "verify" in method_defaults:
+            verify_data.update(method_defaults["verify"])
+        if "verify" in entry:
+            verify_data.update(entry["verify"])
+        verify_block = VerifyBlock.from_dict(verify_data) if verify_data else None
 
+        # Model modifications
         mods = None
-        if "model_modifications" in data:
-            mods = ModelModifications.from_dict(data["model_modifications"])
+        if "model_modifications" in entry:
+            mods = ModelModifications.from_dict(entry["model_modifications"])
+
+        # requires_ci: method_defaults < entry
+        requires_ci = method_defaults.get("requires_ci", False)
+        if "requires_ci" in entry:
+            requires_ci = entry["requires_ci"]
+
+        # Resolve key_group: entry overrides method_defaults
+        key_group = entry.get("key_group") or method_defaults.get("key_group")
+        verify_key_group = entry.get("verify_key_group")
 
         return cls(
-            description=data["description"],
-            method=data["method"],
-            model=data["model"],
-            model_relative_to=data.get("model_relative_to", "assets"),
-            expect=data.get("expect", "pass"),
-            sig_inside_model=data.get("sig_inside_model", False),
-            requires_ci=data.get("requires_ci", False),
+            id=entry["id"],
+            description=entry["description"],
+            method=entry["method"],
+            model=entry["model"],
+            model_relative_to=entry.get(
+                "model_relative_to",
+                cat_defaults.get("model_relative_to", "assets"),
+            ),
+            keys_relative_to=entry.get(
+                "keys_relative_to",
+                cat_defaults.get("keys_relative_to", "assets"),
+            ),
+            expect=entry.get(
+                "expect",
+                cat_defaults.get("expect", "pass"),
+            ),
+            sig_inside_model=entry.get("sig_inside_model", False),
+            requires_ci=requires_ci,
             sign=sign_block,
             verify=verify_block,
-            expected_signed_files=data.get("expected_signed_files"),
+            expected_signed_files=entry.get("expected_signed_files"),
             model_modifications=mods,
+            test_dir=entry.get("test_dir"),
+            key_group=key_group,
+            verify_key_group=verify_key_group,
         )
-
-    @staticmethod
-    def _validate_raw(data: dict, path: Path) -> None:
-        """Validate required fields and enum values."""
-        for key in ("description", "method", "model"):
-            if key not in data:
-                raise ConfigError(f"{path}: missing required field '{key}'")
-        rel = data.get("model_relative_to", "assets")
-        if rel not in _VALID_RELATIVE_TO:
-            raise ConfigError(
-                f"{path}: 'model_relative_to' must be one of {_VALID_RELATIVE_TO}, got '{rel}'"
-            )
-        expect = data.get("expect", "pass")
-        if expect not in _VALID_EXPECT:
-            raise ConfigError(
-                f"{path}: 'expect' must be one of {_VALID_EXPECT}, got '{expect}'"
-            )
-
-
-TestConfig = CaseConfig
-
 
 class ModelSigningClient:
     """Wrapper around the conformance adapter entrypoint."""
@@ -191,9 +227,14 @@ class ModelSigningClient:
     def __init__(self, entrypoint: str) -> None:
         self.entrypoint = entrypoint
 
-    def _run(self, args: list[str]) -> subprocess.CompletedProcess:
+    def _run(
+        self, args: list[str], extra_env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess:
         cmd = [self.entrypoint] + args
-        return subprocess.run(cmd, capture_output=True, text=True)
+        env = None
+        if extra_env:
+            env = {**os.environ, **extra_env}
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
 
     def sign(
         self,
@@ -218,10 +259,6 @@ class ModelSigningClient:
                 args += ["--signing-cert", str(assets_root / sign_block.signing_cert)]
             for cert in sign_block.cert_chain:
                 args += ["--cert-chain", str(assets_root / cert)]
-            if sign_block.identity_token_env:
-                token = _read_identity_token(sign_block.identity_token_env)
-                if token:
-                    args += ["--identity-token", token]
             if sign_block.use_staging:
                 args += ["--use-staging"]
 
@@ -231,7 +268,13 @@ class ModelSigningClient:
                 abs_p = str(model_path / p) if not Path(p).is_absolute() else p
                 args += ["--ignore-paths", abs_p]
 
-        result = self._run(args)
+        extra_env: dict[str, str] = {}
+        if sign_block and sign_block.identity_token_env:
+            token = _read_identity_token(sign_block.identity_token_env)
+            if token:
+                extra_env["SIGSTORE_ID_TOKEN"] = token
+
+        result = self._run(args, extra_env=extra_env or None)
         if result.returncode != 0:
             print(f"[sign stdout] {result.stdout}")
             print(f"[sign stderr] {result.stderr}")
@@ -276,7 +319,10 @@ class ModelSigningClient:
                     identity = os.environ.get(identity[2:-1], identity)
                 args += ["--identity", identity]
             if verify_block.identity_provider:
-                args += ["--identity-provider", verify_block.identity_provider]
+                idp = verify_block.identity_provider
+                if idp.startswith("${") and idp.endswith("}"):
+                    idp = os.environ.get(idp[2:-1], idp)
+                args += ["--identity-provider", idp]
             if verify_block.use_staging:
                 args += ["--use-staging"]
 

@@ -28,6 +28,7 @@ def _install_deps() -> None:
     print("Installing conformance suite dependencies...", flush=True)
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "-q", "-r", str(req_file)],
+        timeout=600,
     )
 
 

@@ -1,0 +1,356 @@
+# Policy negative tests — verify that malformed or mismatched bundles are rejected.
+# Bundle sources: sign (then verify with wrong params), copy (reuse valid bundle),
+# mutate (modify JSON fields), handcraft (garbage/empty/truncated), download (sigstore).
+# Each test must exit non-zero; passing verification is a failure.
+
+description: Policy negative verification tests
+defaults:
+  model_relative_to: assets
+  expect: fail
+method_defaults:
+  key:
+    key_group: certificate
+  certificate:
+    key_group: certificate
+tests:
+- id: certificate-no-code-signing-eku_fail
+  description: 'FAIL: Rejection when signing certificate lacks code_signing EKU'
+  spec_refs:
+  - §4.1
+  method: certificate
+  model: simple
+  expected_signed_files:
+  - signme-1
+  - signme-2
+  bundle_source:
+    type: sign
+    key_group: no-code-signing
+
+- id: certificate-expired_fail
+  description: 'FAIL: Rejection when signing certificate in bundle is expired'
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: certificate
+  model: simple
+  bundle_source:
+    type: sign
+    key_group: expired
+- id: certificate-simple-wrong-ca_fail
+  description: 'FAIL: Rejection when CA certificate used for verification is not the
+    signing CA'
+  spec_refs:
+  - §8.2
+  method: certificate
+  model: simple
+  verify_key_group: wrong
+  bundle_source:
+    type: copy
+    source_test: certificate-simple
+- id: certificate-verify-as-key_fail
+  description: 'FAIL: Certificate-signed bundle rejected when verified with key method'
+  spec_refs:
+  - §4.1
+  method: key
+  model: simple
+  bundle_source:
+    type: copy
+    source_test: certificate-simple
+- id: certificate-verify-as-sigstore_fail
+  description: 'FAIL: Certificate-signed bundle rejected when verified with sigstore
+    method'
+  spec_refs:
+  - §4.1
+  method: sigstore
+  model: simple
+  bundle_source:
+    type: copy
+    source_test: certificate-simple
+  verify:
+    identity: test@example.com
+    identity_provider: https://accounts.example.com
+- id: key-missing-file-with-ignore-unsigned_fail
+  description: 'FAIL: Missing manifest-listed file detected even with --ignore-unsigned-files'
+  spec_refs:
+  - §8.5
+  method: key
+  model: simple
+  model_modifications:
+    delete:
+    - signme-2
+  bundle_source:
+    type: copy
+    source_test: key-simple
+  verify:
+    ignore_unsigned_files: true
+- id: key-simple-corrupted-bundle_fail
+  description: 'FAIL: Rejection of bundle file containing invalid/garbage JSON'
+  spec_refs:
+  - §8.1
+  method: key
+  model: simple
+  model_modifications:
+    delete:
+    - ignore-me
+  bundle_source:
+    type: handcraft
+    variant: corrupted
+- id: key-simple-empty-resources_fail
+  description: 'FAIL: Rejection of bundle with empty resources array'
+  spec_refs:
+  - §5.2.1
+  method: key
+  model: simple
+  bundle_source:
+    type: mutate
+    source_test: key-simple
+    mutation: empty-resources
+- id: key-simple-extra-file_fail
+  description: 'FAIL: Rejection when unsigned file exists in model directory'
+  spec_refs:
+  - §8.4
+  - §8.5
+  method: key
+  model: simple
+  model_modifications:
+    inject:
+      injected.bin: 'injected after signing
+
+        '
+  bundle_source:
+    type: copy
+    source_test: key-simple
+- id: key-simple-missing-file_fail
+  description: 'FAIL: Detection of a missing file that was included in the bundle'
+  spec_refs:
+  - §8.4
+  method: key
+  model: simple
+  model_modifications:
+    delete:
+    - signme-2
+  bundle_source:
+    type: copy
+    source_test: key-simple
+- id: key-simple-missing-serialization_fail
+  description: 'FAIL: Rejection of bundle with missing serialization object in predicate'
+  spec_refs:
+  - §5.2.2
+  - §8.3
+  method: key
+  model: simple
+  bundle_source:
+    type: mutate
+    source_test: key-simple
+    mutation: missing-serialization
+- id: key-simple-no-signature_fail
+  description: 'FAIL: Rejection of bundles with empty signatures array'
+  spec_refs:
+  - §8.1
+  method: key
+  model: simple
+  bundle_source:
+    type: mutate
+    source_test: key-simple
+    mutation: no-signature
+- id: key-simple-tampered-content_fail
+  description: 'FAIL: Detection of file content modification after signing'
+  spec_refs:
+  - §8.4
+  method: key
+  model: simple
+  model_modifications:
+    tamper:
+      signme-1: 'TAMPERED CONTENT
+
+        '
+  bundle_source:
+    type: copy
+    source_test: key-simple
+- id: key-simple-truncated-bundle_fail
+  description: 'FAIL: Rejection of structurally valid but incomplete/truncated bundle'
+  spec_refs:
+  - §8.1
+  method: key
+  model: simple
+  model_modifications:
+    delete:
+    - ignore-me
+  bundle_source:
+    type: handcraft
+    variant: truncated
+    source_test: key-simple
+- id: key-simple-wrong-key_fail
+  description: 'FAIL: Rejection when verification key does not match signing key'
+  spec_refs:
+  - §8.2
+  method: key
+  model: simple
+  verify_key_group: wrong
+  bundle_source:
+    type: copy
+    source_test: key-simple
+- id: key-simple-wrong-mediatype_fail
+  description: 'FAIL: Rejection of bundles with invalid mediaType field'
+  spec_refs:
+  - §8.1
+  method: key
+  model: simple
+  bundle_source:
+    type: mutate
+    source_test: key-simple
+    mutation: wrong-mediatype
+- id: key-simple-wrong-payload-type_fail
+  description: 'FAIL: Rejection of bundle with wrong DSSE payloadType'
+  spec_refs:
+  - §6.7
+  - §8.1
+  method: key
+  model: simple
+  bundle_source:
+    type: mutate
+    source_test: key-simple
+    mutation: wrong-payload-type
+- id: key-simple-wrong-statement-type_fail
+  description: 'FAIL: Rejection of bundle with wrong in-toto statement _type'
+  spec_refs:
+  - §8.3
+  method: key
+  model: simple
+  bundle_source:
+    type: mutate
+    source_test: key-simple
+    mutation: wrong-statement-type
+- id: key-tampered-with-ignore-unsigned_fail
+  description: 'FAIL: Tampered file detected even with --ignore-unsigned-files'
+  spec_refs:
+  - §8.5
+  method: key
+  model: simple
+  model_modifications:
+    tamper:
+      signme-1: 'TAMPERED CONTENT
+
+        '
+  bundle_source:
+    type: copy
+    source_test: key-simple
+  verify:
+    ignore_unsigned_files: true
+- id: key-verify-as-certificate_fail
+  description: 'FAIL: Key-signed bundle rejected when verified as certificate method'
+  spec_refs:
+  - §4.1
+  method: certificate
+  model: simple
+  bundle_source:
+    type: copy
+    source_test: key-simple
+- id: key-verify-as-sigstore_fail
+  description: 'FAIL: Key-signed bundle rejected when verified with sigstore method'
+  spec_refs:
+  - §4.1
+  method: sigstore
+  model: simple
+  bundle_source:
+    type: copy
+    source_test: key-simple
+  verify:
+    identity: test@example.com
+    identity_provider: https://accounts.example.com
+- id: malformed-empty-bundle_fail
+  description: 'FAIL: Rejection of empty file as bundle (zero bytes)'
+  spec_refs:
+  - §8.1
+  method: key
+  model: simple
+  bundle_source:
+    type: handcraft
+    variant: empty
+- id: malformed-missing-envelope_fail
+  description: 'FAIL: Rejection of valid JSON bundle missing dsseEnvelope field'
+  spec_refs:
+  - §8.1
+  method: key
+  model: simple
+  bundle_source:
+    type: handcraft
+    variant: missing-envelope
+- id: malformed-wrong-predicate_fail
+  description: 'FAIL: Rejection of bundle with incorrect predicateType'
+  spec_refs:
+  - §5.1
+  - §8.3
+  method: key
+  model: simple
+  bundle_source:
+    type: mutate
+    source_test: key-simple
+    mutation: wrong-predicate
+- id: sigstore-tampered-content_fail
+  description: 'FAIL: Sigstore bundle must reject tampered model content'
+  spec_refs:
+  - §7
+  - §8.4
+  method: sigstore
+  model: model
+  model_relative_to: test_dir
+  requires_ci: true
+  model_modifications:
+    tamper:
+      signme-1: tampered content that should cause digest mismatch
+  verify:
+    identity: stefanb@us.ibm.com
+    identity_provider: https://sigstore.verify.ibm.com/oauth2
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download
+- id: sigstore-verify-as-key_fail
+  description: 'FAIL: Sigstore-signed bundle rejected when verified with key method'
+  spec_refs:
+  - §4.1
+  method: key
+  model: model
+  model_relative_to: test_dir
+  keys_relative_to: test_dir
+  verify:
+    public_key: verify-material/signing-key-pub.pem
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download
+- id: sigstore-wrong-identity_fail
+  description: 'FAIL: Sigstore verification must reject when certificate identity
+    does not match'
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: sigstore
+  model: model
+  model_relative_to: test_dir
+  requires_ci: true
+  verify:
+    identity: https://github.com/wrong-org/wrong-repo/.github/workflows/wrong.yml@refs/heads/main
+    identity_provider: https://token.actions.githubusercontent.com
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download
+- id: sigstore-wrong-issuer_fail
+  description: 'FAIL: Sigstore verification must reject when OIDC issuer does not
+    match'
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: sigstore
+  model: model
+  model_relative_to: test_dir
+  requires_ci: true
+  verify:
+    identity: https://github.com/sigstore/sigstore-python/.github/workflows/release.yml@refs/heads/main
+    identity_provider: https://wrong-issuer.example.com
+    ignore_paths:
+    - ignore-me
+  bundle_source:
+    type: download

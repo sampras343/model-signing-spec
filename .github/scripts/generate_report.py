@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import html
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,9 +17,14 @@ from pathlib import Path
 
 def load_report(path: Path) -> dict:
     try:
-        return json.loads(path.read_text())
-    except Exception:
-        return {}
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"ERROR: Failed to parse report {path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(data, dict):
+        print(f"ERROR: {path}: expected JSON object, got {type(data).__name__}", file=sys.stderr)
+        sys.exit(1)
+    return data
 
 
 def compute_pass_rate(summary: dict) -> str:
@@ -56,11 +62,11 @@ def generate_html(reports: dict[str, dict], output: Path) -> None:
         pass_rate = compute_pass_rate(summary) if summary else "—"
         css_class = row_class(summary)
 
-        client_link = f'<a href="{client_url}">{client_name}</a>'
+        client_link = f'<a href="{html.escape(client_url)}">{html.escape(client_name)}</a>'
         if sha:
-            client_link += f' <small>(<a href="{sha_url}">{sha}</a>)</small>'
+            client_link += f' <small>(<a href="{html.escape(sha_url)}">{html.escape(sha)}</a>)</small>'
         if workflow_url != "#":
-            client_link += f' <small>[<a href="{workflow_url}">run</a>]</small>'
+            client_link += f' <small>[<a href="{html.escape(workflow_url)}">run</a>]</small>'
 
         rows.append(
             f'<tr class="{css_class}">'
@@ -75,7 +81,7 @@ def generate_html(reports: dict[str, dict], output: Path) -> None:
 
     table_rows = "\n        ".join(rows)
 
-    html = f"""<!DOCTYPE html>
+    html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -113,7 +119,7 @@ def generate_html(reports: dict[str, dict], output: Path) -> None:
   <h1>OMS Conformance Report</h1>
   <p class="subtitle">
     Conformance test results for OpenSSF Model Signing (OMS) language clients.
-    See <a href="https://github.com/sampras343/model-signing-spec/tree/main/conformance">conformance suite</a>
+    See <a href="https://github.com/ossf/model-signing-spec/tree/main/conformance">conformance suite</a>
     for the test suite and protocol specification.
   </p>
 
@@ -137,7 +143,7 @@ def generate_html(reports: dict[str, dict], output: Path) -> None:
 </body>
 </html>
 """
-    output.write_text(html)
+    output.write_text(html_content)
     print(f"Report written to {output}")
 
 
@@ -160,7 +166,8 @@ def main() -> int:
         reports[client_name] = load_report(json_file)
 
     if not reports:
-        print("WARNING: No client report files found", file=sys.stderr)
+        print(f"ERROR: No client report files found in {reports_dir}", file=sys.stderr)
+        return 1
 
     generate_html(reports, args.output)
     return 0

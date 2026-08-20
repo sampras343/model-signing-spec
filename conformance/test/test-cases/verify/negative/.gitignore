@@ -1,0 +1,4 @@
+# Regenerable bundles -- generated at test time by generate_bundles.py.
+# Sigstore-signed bundles are committed (require OIDC tokens to regenerate).
+*/bundle.sig
+!sigstore-*/bundle.sig

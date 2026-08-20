@@ -1,0 +1,65 @@
+# Policy positive tests — verify that correctly signed bundles pass verification.
+# Bundles are generated at test time by signing models with generated keys.
+# Tests the happy path of the verification protocol.
+
+description: Policy positive verification tests
+defaults:
+  model_relative_to: assets
+  bundle_source:
+    type: sign
+method_defaults:
+  key:
+    key_group: certificate
+  certificate:
+    key_group: certificate
+tests:
+- id: certificate-simple
+  description: Baseline certificate-based verification with 3-level PKI chain
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: certificate
+  model: simple
+- id: key-ignore-paths
+  description: Verifies --ignore-paths correctly excludes files from the signed manifest
+  spec_refs:
+  - §6.2
+  - §6.2.1
+  method: key
+  model: simple
+- id: key-multi-file
+  description: Key verification on a model with files in subdirectories
+  spec_refs:
+  - §6.1
+  - §6.1.2
+  - §6.4
+  method: key
+  model: multi-file
+- id: key-simple
+  description: Baseline key-based verification against a two-file model
+  spec_refs:
+  - §4.1
+  - §6.2
+  - §8.1
+  - §8.4
+  method: key
+  model: simple
+- id: key-simple-ignore-unsigned-files
+  description: Verifies --ignore-unsigned-files allows extra unsigned files to pass
+  spec_refs:
+  - §8.5
+  method: key
+  model: simple
+  model_modifications:
+    inject:
+      extra.bin: 'extra file added after signing
+
+        '
+  verify:
+    ignore_unsigned_files: true
+- id: key-single-file
+  description: Key verification when the model is a single file
+  spec_refs:
+  - §6.1.2
+  method: key
+  model: single-file

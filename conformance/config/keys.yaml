@@ -1,0 +1,186 @@
+# Key and certificate catalog for the conformance test suite.
+#
+# Each entry describes a key group that generate_keys.py produces.
+# Tests reference key groups by name via the key_group field
+# (e.g., key_group: certificate). config_loader.py resolves the
+# key_group + method into actual sign/verify file paths using the
+# roles section.
+#
+# To add a new key group:
+#   1. Add an entry here with name, description, purpose, when_to_use
+#   2. Add generation logic in generate_keys.py
+#   3. Reference it in test YAMLs via key_group: <name>
+
+keys:
+  - name: certificate
+    description: 3-level PKI chain for certificate-method signing
+    purpose: Primary signing chain used by all certificate and key-method tests
+    when_to_use: Default for most roundtrip and verify tests
+    curve: P-384
+    chain:
+      - role: root-ca
+        file: ca-cert.pem
+        signs: intermediate-ca
+      - role: intermediate-ca
+        file: int-ca-cert.pem
+        signed_by: root-ca
+        signs: leaf
+      - role: leaf
+        file: signing-key-cert.pem
+        signed_by: intermediate-ca
+    files:
+      - name: ca-cert.pem
+        description: Root CA certificate (trust anchor for verification)
+      - name: ca-priv.pem
+        description: Root CA private key (only used during generation)
+      - name: int-ca-cert.pem
+        description: Intermediate CA certificate (included in sign cert_chain)
+      - name: int-ca-priv.pem
+        description: Intermediate CA private key (only used during generation)
+      - name: signing-key.pem
+        description: Leaf EC private key
+      - name: signing-key-pub.pem
+        description: Leaf public key
+      - name: signing-key-cert.pem
+        description: Leaf certificate with code_signing EKU
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: sign_cert
+        file: signing-key-cert.pem
+      - role: sign_cert_chain
+        files: [int-ca-cert.pem]
+      - role: verify_public_key
+        file: signing-key-pub.pem
+      - role: verify_cert_chain
+        files: [ca-cert.pem]
+
+  - name: p256
+    description: Standalone EC P-256 keypair
+    purpose: Test key-method signing with P-256 curve
+    when_to_use: When testing a specific EC curve (P-256)
+    curve: P-256
+    files:
+      - name: signing-key.pem
+        description: EC P-256 private key
+      - name: signing-key-pub.pem
+        description: Corresponding public key
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: verify_public_key
+        file: signing-key-pub.pem
+
+  - name: p384
+    description: Standalone EC P-384 keypair
+    purpose: Test key-method signing with P-384 curve
+    when_to_use: When testing a specific EC curve (P-384)
+    curve: P-384
+    files:
+      - name: signing-key.pem
+        description: EC P-384 private key
+      - name: signing-key-pub.pem
+        description: Corresponding public key
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: verify_public_key
+        file: signing-key-pub.pem
+
+  - name: p521
+    description: Standalone EC P-521 keypair
+    purpose: Test key-method signing with P-521 curve
+    when_to_use: When testing a specific EC curve (P-521)
+    curve: P-521
+    files:
+      - name: signing-key.pem
+        description: EC P-521 private key
+      - name: signing-key-pub.pem
+        description: Corresponding public key
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: verify_public_key
+        file: signing-key-pub.pem
+
+  - name: self-signed
+    description: Self-signed EC P-256 cert with code-signing EKU
+    purpose: Test certificate verification without a CA chain
+    when_to_use: When testing self-signed certificate workflow
+    curve: P-256
+    files:
+      - name: signing-key.pem
+        description: EC P-256 private key
+      - name: signing-cert.pem
+        description: Self-signed certificate (acts as both signing cert and trust anchor)
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: sign_cert
+        file: signing-cert.pem
+      - role: sign_cert_chain
+        files: [signing-cert.pem]
+      - role: verify_cert_chain
+        files: [signing-cert.pem]
+
+  - name: expired
+    description: Leaf cert with notAfter 2020-01-02
+    purpose: Test that expired certificates are rejected during verification
+    when_to_use: Negative test for certificate expiry validation
+    curve: P-384
+    depends_on: certificate
+    files:
+      - name: signing-key.pem
+        description: EC P-384 private key for expired cert
+      - name: signing-key-cert.pem
+        description: Expired leaf certificate (notAfter 2020-01-02)
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: sign_cert
+        file: signing-key-cert.pem
+      - role: sign_cert_chain
+        files: [int-ca-cert.pem]
+        from_group: certificate
+      - role: verify_cert_chain
+        files: [ca-cert.pem]
+        from_group: certificate
+
+  - name: no-code-signing
+    description: Leaf cert WITHOUT code_signing EKU, signed by certificate chain
+    purpose: Test that signing with a cert lacking code_signing EKU is rejected
+    when_to_use: Negative test for EKU validation
+    curve: P-384
+    depends_on: certificate
+    files:
+      - name: signing-key.pem
+        description: EC P-384 private key
+      - name: signing-key-cert.pem
+        description: Leaf certificate WITHOUT code_signing EKU
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: sign_cert
+        file: signing-key-cert.pem
+      - role: sign_cert_chain
+        files: [int-ca-cert.pem]
+        from_group: certificate
+      - role: verify_cert_chain
+        files: [ca-cert.pem]
+        from_group: certificate
+
+  - name: wrong
+    description: Unrelated CA and keypair for negative tests
+    purpose: Verify that verification fails with non-matching keys
+    when_to_use: When writing a test that must reject due to key or CA mismatch
+    curve: P-256
+    files:
+      - name: wrong-key-pub.pem
+        description: Unrelated public key (does not match any signing key)
+      - name: wrong-ca-cert.pem
+        description: Self-signed CA from a completely different chain
+    roles:
+      - role: verify_public_key
+        file: wrong-key-pub.pem
+      - role: verify_cert_chain
+        files: [wrong-ca-cert.pem]
