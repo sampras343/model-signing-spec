@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "model-signing-conformance"
+version = "0.1.0"
+description = "Conformance test suite for OpenSSF Model Signing (OMS)"
+requires-python = ">=3.9"
+dependencies = [
+    "pytest>=9.1.1",
+    "pytest-json-report>=1.5.0",
+    "jsonschema>=4.20",
+    "referencing>=0.31",
+    "cryptography>=50.0.0",
+    "pyyaml>=6.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+
+[tool.ruff]
+line-length = 100

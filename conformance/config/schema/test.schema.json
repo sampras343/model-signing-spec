@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test.schema.json",
+  "title": "Test suite category file",
+  "type": "object",
+  "required": ["description", "tests"],
+  "additionalProperties": false,
+  "properties": {
+    "description": { "type": "string" },
+    "defaults": { "$ref": "#/$defs/category_defaults" },
+    "method_defaults": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/method_default" }
+    },
+    "tests": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/test_entry" },
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "category_defaults": {
+      "type": "object",
+      "properties": {
+        "model_relative_to": { "enum": ["assets", "test_dir"] },
+        "keys_relative_to": { "enum": ["assets", "test_dir"] },
+        "expect": { "enum": ["pass", "fail"] }
+      }
+    },
+    "method_default": {
+      "type": "object",
+      "properties": {
+        "requires_ci": { "type": "boolean" },
+        "sign": { "$ref": "#/$defs/sign_block" },
+        "verify": { "$ref": "#/$defs/verify_block" }
+      }
+    },
+    "test_entry": {
+      "type": "object",
+      "required": ["id", "description", "method", "model"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "description": { "type": "string" },
+        "spec_refs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^§[0-9.]+" }
+        },
+        "method": { "enum": ["key", "certificate", "sigstore"] },
+        "model": { "type": "string" },
+        "model_relative_to": { "enum": ["assets", "test_dir"] },
+        "keys_relative_to": { "enum": ["assets", "test_dir"] },
+        "expect": { "enum": ["pass", "fail"] },
+        "sig_inside_model": { "type": "boolean" },
+        "requires_ci": { "type": "boolean" },
+        "test_dir": { "type": "string" },
+        "expected_signed_files": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sign": { "$ref": "#/$defs/sign_block" },
+        "verify": { "$ref": "#/$defs/verify_block" },
+        "model_modifications": { "$ref": "#/$defs/model_modifications" },
+        "bundle_source": { "$ref": "#/$defs/bundle_source" }
+      }
+    },
+    "sign_block": {
+      "type": "object",
+      "properties": {
+        "private_key": { "type": "string" },
+        "signing_cert": { "type": "string" },
+        "cert_chain": { "type": "array", "items": { "type": "string" } },
+        "identity_token_env": { "type": "string" },
+        "use_staging": { "type": "boolean" }
+      }
+    },
+    "verify_block": {
+      "type": "object",
+      "properties": {
+        "public_key": { "type": "string" },
+        "cert_chain": { "type": "array", "items": { "type": "string" } },
+        "ignore_paths": { "type": "array", "items": { "type": "string" } },
+        "ignore_unsigned_files": { "type": "boolean" },
+        "identity": { "type": "string" },
+        "identity_provider": { "type": "string" },
+        "use_staging": { "type": "boolean" }
+      }
+    },
+    "model_modifications": {
+      "type": "object",
+      "properties": {
+        "tamper": { "type": "object", "additionalProperties": { "type": "string" } },
+        "delete": { "type": "array", "items": { "type": "string" } },
+        "inject": { "type": "object", "additionalProperties": { "type": "string" } },
+        "symlinks": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "bundle_source": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["sign", "copy", "mutate", "handcraft", "download"] },
+        "source_test_dir": { "type": "string" },
+        "mutation": { "type": "string" },
+        "variant": { "type": "string" },
+        "sign": { "$ref": "#/$defs/sign_block" },
+        "model_files": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

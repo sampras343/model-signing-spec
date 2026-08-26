@@ -1,0 +1,21 @@
+# Conformance suite master index.
+# All paths are relative to this file's directory (conformance/config/).
+# config_loader.py reads this file to discover and load all other configs.
+
+spec_version: "1.0"
+
+config:
+  models: models.yaml      # Model fixture definitions — what files to generate per model type
+  keys: keys.yaml          # Key/cert catalog — groups, chain relationships, roles for test linking
+  fixtures: fixtures.yaml  # OCI artifact config — where to download pre-signed historical bundles
+  bundle_transforms: bundle-transforms.yaml  # Mutation and handcraft definitions for bundle generation
+
+test_suites:
+  roundtrip: ../test/test-cases/roundtrip.yaml              # Sign-then-verify tests (31)
+  historical: ../test/test-cases/historical.yaml            # Backward compat + Go interop tests (15)
+  policy_positive: ../test/test-cases/policy-positive.yaml  # Verify-must-pass policy tests (6)
+  policy_negative: ../test/test-cases/policy-negative.yaml  # Verify-must-fail policy tests (27)
+
+schema:
+  model: schema/model.schema.json  # JSON Schema for validating models.yaml entries
+  test: schema/test.schema.json    # JSON Schema for validating test YAML entries

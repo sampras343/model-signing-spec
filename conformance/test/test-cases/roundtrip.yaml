@@ -1,0 +1,307 @@
+# Roundtrip tests — sign a model then verify the produced bundle.
+# Covers all three signing methods (key, certificate, sigstore).
+# Each test generates keys and models at runtime; nothing is pre-committed.
+
+description: Sign-then-verify roundtrip tests
+defaults:
+  model_relative_to: assets
+method_defaults:
+  key:
+    key_group: certificate
+  certificate:
+    key_group: certificate
+  sigstore:
+    requires_ci: true
+    sign:
+      identity_token_env: SIGSTORE_ID_TOKEN
+      use_staging: true
+    verify:
+      identity: ${SIGSTORE_IDENTITY}
+      identity_provider: ${SIGSTORE_ISSUER}
+      use_staging: true
+tests:
+- id: certificate-multi-file
+  description: Certificate roundtrip on a model with subdirectories
+  spec_refs:
+  - §4.1
+  - §6.1
+  - §6.1.2
+  method: certificate
+  model: multi-file
+- id: certificate-self-signed
+  description: Certificate roundtrip with a self-signed certificate (no intermediate
+    CA)
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: certificate
+  model: simple
+  key_group: self-signed
+- id: certificate-simple
+  description: Certificate sign-then-verify roundtrip using 3-level PKI chain
+  spec_refs:
+  - §4.1
+  - §5.2
+  - §8.2
+  method: certificate
+  model: simple
+- id: key-assets-subdir
+  description: Recursive file enumeration through asset subdirectories
+  spec_refs:
+  - §6.1
+  method: key
+  model: with-assets-subdir
+- id: key-binary-content
+  description: Signing and verification of models containing true binary data
+  spec_refs:
+  - §6.3.1
+  method: key
+  model: binary-content
+  # Note: .github/ auto-exclusion is implementation behavior; OMS spec §6.2
+  # only lists .git, .gitignore, .gitattributes. If spec clarifies, update
+  # expected_signed_files and model type:signed/ignored annotations.
+- id: key-deeply-nested
+  description: Key roundtrip on a model with deeply nested directory structure
+  spec_refs:
+  - §6.1
+  - §6.1.2
+  method: key
+  model: deeply-nested
+- id: key-deeply-nested-with-git
+  description: .git at root excluded even with deeply nested model files
+  spec_refs:
+  - §6.2
+  method: key
+  model: deeply-nested-with-git
+- id: key-default-ignores
+  description: .git, .gitignore, .gitattributes are auto-excluded without explicit
+    --ignore-paths
+  spec_refs:
+  - §6.2
+  method: key
+  model: with-git-dir
+  expected_signed_files:
+  - model.bin
+- id: key-dotfile-included
+  description: Non-git dotfiles (.config, .env.example) ARE signed and not excluded
+  spec_refs:
+  - §6.2
+  method: key
+  model: with-dotfiles
+- id: key-empty-file
+  description: Key roundtrip on a model containing a zero-byte file
+  spec_refs:
+  - §6.3.1
+  method: key
+  model: with-empty-file
+- id: key-empty-model-rejected
+  description: 'FAIL: Signing an empty model directory must be rejected'
+  spec_refs:
+  - §6.1
+  method: key
+  model: empty
+  expect: fail
+- id: key-files-in-hidden-dir
+  description: Files in hidden directories (.cache/, .local/) ARE signed
+  spec_refs:
+  - §6.2
+  method: key
+  model: hidden-subdir
+- id: key-git-and-ignore-combined
+  description: Full combination of .git, .gitignore, .gitattributes exclusions
+  spec_refs:
+  - §6.2
+  method: key
+  model: with-git-and-ignore
+- id: key-ignore-paths
+  description: Roundtrip with --ignore-paths excluding a file during signing
+  spec_refs:
+  - §6.2
+  - §6.2.1
+  method: key
+  model: simple
+- id: key-ignore-paths-exact-match
+  description: User ignore-paths must match exact relative path only, not nested paths
+  spec_refs:
+  - §6.2.1
+  method: key
+  model: with-nested-ignore
+  expected_signed_files:
+  - signme-1
+  - subdir/ignore-me
+  verify:
+    ignore_paths:
+    - ignore-me
+- id: key-ignore-unsigned
+  description: Roundtrip with --ignore-unsigned-files to tolerate files added after
+    signing
+  spec_refs:
+  - §8.5
+  method: key
+  model: simple
+  verify:
+    ignore_unsigned_files: true
+- id: key-multi-file
+  description: Key roundtrip on a model with subdirectories
+  spec_refs:
+  - §6.1
+  - §6.1.2
+  - §6.4
+  method: key
+  model: multi-file
+- id: key-multi-git-dirs
+  description: Multiple .git directories at various levels are all excluded
+  spec_refs:
+  - §6.2
+  - §6.2.1
+  method: key
+  model: multi-git-dirs
+- id: key-multi-gitignore
+  description: Multiple .gitignore files at various levels are all excluded
+  spec_refs:
+  - §6.2
+  - §6.2.1
+  method: key
+  model: multi-gitignore
+- id: key-nested-git-not-excluded
+  description: Nested .gitignore inside a subdirectory must NOT be auto-excluded
+  spec_refs:
+  - §6.2
+  method: key
+  model: with-nested-gitignore
+- id: key-p256
+  description: EC P-256 (secp256r1) key sign-then-verify roundtrip
+  spec_refs:
+  - §4.2
+  method: key
+  model: simple
+  key_group: p256
+- id: key-p384
+  description: Key roundtrip using EC P-384 key (spec MUST support)
+  spec_refs:
+  - §4.2
+  method: key
+  model: simple
+  key_group: p384
+- id: key-p521
+  description: Key roundtrip using EC P-521 key (spec MUST support)
+  spec_refs:
+  - §4.2
+  method: key
+  model: simple
+  key_group: p521
+- id: key-sig-inside-model
+  description: Signature file placed inside the model directory is auto-excluded from
+    manifest
+  spec_refs:
+  - §6.2
+  - §9
+  method: key
+  model: simple
+  sig_inside_model: true
+- id: key-simple
+  description: Basic key sign-then-verify roundtrip on a simple two-file model
+  spec_refs:
+  - §4.1
+  - §5.2
+  - §6.1
+  - §6.5
+  - §8.1
+  - §8.4
+  method: key
+  model: simple
+- id: key-simple-deterministic
+  description: Signing the same model twice produces identical manifests
+  spec_refs:
+  - §6.4
+  - §6.5.1
+  method: key
+  model: simple
+- id: key-single-file
+  description: Key roundtrip for a single-file model
+  spec_refs:
+  - §6.1.2
+  method: key
+  model: single-file
+- id: key-special-chars-path
+  description: Signing and verification of models with spaces and special characters
+    in paths
+  spec_refs:
+  - §6.1.2
+  method: key
+  model: special-chars
+- id: key-symlink-cycle
+  description: 'FAIL: Model containing a symlink cycle must be rejected'
+  spec_refs:
+  - §6.1.1
+  method: key
+  model: simple
+  expect: fail
+  model_modifications:
+    symlinks:
+      cycle-link: .
+- id: key-symlink-default-rejected
+  description: 'FAIL: Model containing a symlink must be rejected when allow_symlinks
+    is false'
+  spec_refs:
+  - §6.1.1
+  method: key
+  model: simple
+  expect: fail
+  model_modifications:
+    symlinks:
+      link-to-signme: signme-1
+- id: key-symlink-outside-root
+  description: 'FAIL: Model containing a symlink pointing outside the model root must
+    be rejected'
+  spec_refs:
+  - §6.1.1
+  method: key
+  model: simple
+  expect: fail
+  model_modifications:
+    symlinks:
+      outside-link: /tmp/nonexistent-target
+- id: key-unicode-filename
+  description: Key roundtrip on a model with Unicode characters in filenames
+  spec_refs:
+  - §6.1.2
+  method: key
+  model: unicode-names
+- id: sigstore-ignore-paths
+  description: Keyless sigstore sign-then-verify with --ignore-paths
+  spec_refs:
+  - §4.1
+  - §6.2
+  method: sigstore
+  model: simple
+- id: sigstore-multi-file
+  description: Keyless sigstore sign-then-verify on multi-file model with subdirectories
+  spec_refs:
+  - §4.1
+  - §6.1
+  - §6.1.2
+  method: sigstore
+  model: multi-file
+- id: sigstore-sig-inside-model
+  description: Keyless sigstore sign with bundle placed inside the model directory
+  spec_refs:
+  - §4.1
+  - §6.2
+  method: sigstore
+  model: simple
+  sig_inside_model: true
+- id: sigstore-simple
+  description: Keyless sigstore sign-then-verify on simple model (requires CI OIDC
+    token)
+  spec_refs:
+  - §4.1
+  method: sigstore
+  model: simple
+- id: sigstore-single-file
+  description: Keyless sigstore sign-then-verify on a single-file model
+  spec_refs:
+  - §4.1
+  - §6.1
+  method: sigstore
+  model: single-file

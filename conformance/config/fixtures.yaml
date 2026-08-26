@@ -1,0 +1,16 @@
+# Pre-signed test fixture download configuration.
+#
+# These are irreproducible bundles (historical format versions, Go-interop,
+# sigstore-negative) stored as a cosign-signed OCI artifact on ghcr.io.
+# download_fixtures.py pulls and verifies them before tests run.
+#
+# To update: push a new OCI artifact, cosign sign it, update digest below.
+# When migrating to upstream: change image to ghcr.io/ossf/model-signing-spec/...
+
+description: Pre-signed bundles stored as OCI artifact, signed with cosign
+image: ghcr.io/sampras343/model-signing-spec/conformance-fixtures
+tag: v1.1
+digest: "sha256:ed7aab82690bc27dcef71865c20517624a6313b86a782ca8abeae4694f277424"
+cosign:
+  certificate_identity: sampras343@gmail.com
+  certificate_oidc_issuer: https://github.com/login/oauth

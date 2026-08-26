@@ -1,0 +1,103 @@
+# Bundle transform definitions for the conformance test suite.
+#
+# Mutations modify a valid signed bundle to test rejection scenarios.
+# Handcrafts create bundles from scratch without any signing tool.
+# generate_bundles.py reads these definitions and applies them generically
+# via a config-driven transform engine — no hardcoded Python functions.
+#
+# Mutation operations:
+#   - set:    Navigate dotted path, assign value
+#   - delete: Navigate dotted path, remove key
+#
+# Mutation targets:
+#   - envelope (default): Operate on the top-level bundle dict
+#   - payload:            Base64-decode DSSE payload, operate, re-encode
+#
+# Handcraft content types:
+#   - empty: Zero-byte file
+#   - json:  Serialize 'content' dict as JSON
+#   - (none): Write 'content' string as-is
+#
+# Handcraft operations:
+#   - truncate: Read source bundle, keep first N bytes
+
+mutations:
+  - name: wrong-mediatype
+    description: Change mediaType to an invalid value
+    spec_refs: ["§8.1"]
+    operation: set
+    path: mediaType
+    value: "application/json"
+
+  - name: wrong-payload-type
+    description: Change DSSE payloadType to an invalid value
+    spec_refs: ["§6.7", "§8.1"]
+    operation: set
+    path: dsseEnvelope.payloadType
+    value: "application/octet-stream"
+
+  - name: wrong-statement-type
+    description: Change in-toto statement _type to wrong version
+    spec_refs: ["§8.3"]
+    operation: set
+    target: payload
+    path: _type
+    value: "https://in-toto.io/Statement/v0.1"
+
+  - name: wrong-predicate
+    description: Change predicateType to an unrecognized value
+    spec_refs: ["§5.1", "§8.3"]
+    operation: set
+    target: payload
+    path: predicateType
+    value: "https://example.com/wrong-predicate/v1.0"
+
+  - name: empty-resources
+    description: Set resources array to empty
+    spec_refs: ["§5.2.1"]
+    operation: set
+    target: payload
+    path: predicate.resources
+    value: []
+
+  - name: missing-serialization
+    description: Remove serialization object from predicate
+    spec_refs: ["§5.2.2", "§8.3"]
+    operation: delete
+    target: payload
+    path: predicate.serialization
+
+  - name: no-signature
+    description: Set signatures array to empty
+    spec_refs: ["§8.1"]
+    operation: set
+    path: dsseEnvelope.signatures
+    value: []
+
+handcrafts:
+  - name: empty
+    description: Zero-byte file (empty bundle)
+    spec_refs: ["§8.1"]
+    content_type: empty
+
+  - name: corrupted
+    description: Invalid/garbage JSON that is not a valid bundle
+    spec_refs: ["§8.1"]
+    content: '{"garbage": true}'
+
+  - name: truncated
+    description: First 100 bytes of a valid bundle (structurally incomplete)
+    spec_refs: ["§8.1"]
+    operation: truncate
+    bytes: 100
+
+  - name: missing-envelope
+    description: Valid JSON bundle missing the dsseEnvelope field
+    spec_refs: ["§8.1"]
+    content_type: json
+    content:
+      mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json"
+      verificationMaterial:
+        publicKey:
+          hint: "e8450dec4eb99dae995da9af1bc2cc9f76ed669ee2e744f57abba763df3e3f8e"
+        tlogEntries: []
