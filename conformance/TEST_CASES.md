@@ -1,6 +1,6 @@
 # Conformance test cases
 
-**86 tests** total: **37 roundtrip** (live sign, then verify) and **49 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in the [OMS Specification](https://github.com/ossf/model-signing-spec/blob/main/spec/v1.0.md); section references below use the same numbering as that spec.
+**90 tests** total: **37 roundtrip** (live sign, then verify) and **53 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in the [OMS Specification](https://github.com/ossf/model-signing-spec/blob/main/spec/v1.0.md); section references below use the same numbering as that spec.
 
 **oms-schemas:** Every successful roundtrip run validates produced bundles and decoded DSSE payloads against the published OMS JSON Schemas from the `oms-schemas` package (outer bundle, statement, predicate, resources), in addition to the test harness’s own structural checks.
 
@@ -17,7 +17,10 @@
 | §4.1 | sigstore wrong issuer rejection | sigstore-wrong-issuer_fail | Covered (CI-only) |
 | §4.1 | Accept hint or rawBytes in publicKey | historical-v0.3.1/v1.0.0 (rawBytes) vs v1.1.0 (hint) | Covered |
 | §4.1 | Accept keyid absent/empty/null | Go vs Python bundles | Covered |
-| §4.1 | Certificate validity period enforced | certificate-expired_fail | Covered |
+| §4.1 | Certificate validity period enforced | certificate-expired_fail, certificate-not-yet-valid_fail | Covered |
+| §4.1 | Intermediate CA validity period enforced | certificate-expired-intermediate_fail | Covered |
+| §4.1 | Root CA validity period enforced | certificate-expired-root_fail | Covered |
+| §4.1 | Full-chain expiry rejected (no time-pinning) | certificate-all-expired_fail | Covered |
 | §4.1 | Certificate must have code_signing EKU | certificate-no-code-signing-eku_fail | Covered |
 | §4.1 | Method-specific verificationMaterial match | key-verify-as-certificate_fail, certificate-verify-as-key_fail, sigstore-verify-as-key_fail, key-verify-as-sigstore_fail, certificate-verify-as-sigstore_fail | Covered |
 | §4.1 | Producers MUST use hint field in publicKey | _assert_key_uses_hint (all key roundtrip) | Covered |
@@ -365,7 +368,7 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 
 **Impact if it fails:** Latest sigstore bundles from Go v1.1.0 are unverifiable.
 
-### Negative cases (28)
+### Negative cases (32)
 
 #### `key-simple-tampered-content_fail`
 **Spec:** §8.4
@@ -548,6 +551,58 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 **Expected outcome:** Non-zero exit; temporal validation must fail.
 
 **Impact if it fails:** **Security failure** - decommissioned or expired credentials could be accepted as valid.
+
+#### `certificate-not-yet-valid_fail`
+**Spec:** §4.1, §8.2
+
+**What it tests:** A leaf certificate whose **validity period has not yet started** (notBefore is one year in the future) while the chain and signature are otherwise valid.
+
+**Setup:** Generated leaf cert with notBefore = now + 1 year, notAfter = now + 2 years, issued by the standard intermediate CA. Signing or verification uses this future-dated certificate.
+
+**Why it exists:** X.509 temporal validation requires checking both notBefore and notAfter. A certificate that is not yet valid must be rejected just as firmly as one that has expired.
+
+**Expected outcome:** Non-zero exit; temporal validation must fail (certificate not yet valid).
+
+**Impact if it fails:** **Security failure** - certificates issued for future use could be accepted before their intended activation date, bypassing temporal controls.
+
+#### `certificate-expired-intermediate_fail`
+**Spec:** §4.1, §8.2
+
+**What it tests:** A valid leaf certificate whose **intermediate CA** has an expired validity period (notAfter 2020-01-02). The root CA and leaf are otherwise valid.
+
+**Setup:** Dedicated expired intermediate CA cert (notBefore 2020-01-01, notAfter 2020-01-02) signed by the standard root CA. A valid leaf cert is issued from this expired intermediate.
+
+**Why it exists:** X.509 chain validation must verify the validity period of every certificate in the chain, not just the leaf. An expired intermediate CA invalidates all certificates it issued.
+
+**Expected outcome:** Non-zero exit; chain temporal validation must fail at the intermediate CA level.
+
+**Impact if it fails:** **Security failure** - an expired intermediate CA could continue to be accepted, allowing its leaf certificates to verify despite the CA being decommissioned.
+
+#### `certificate-expired-root_fail`
+**Spec:** §4.1, §8.2
+
+**What it tests:** A valid leaf certificate and valid intermediate CA whose **root CA** (trust anchor) has an expired validity period (notAfter 2020-01-02). All other aspects of the chain are correct.
+
+**Setup:** Dedicated expired root CA cert. Valid intermediate and leaf certs issued from this expired root. Verification uses the expired root as trust anchor.
+
+**Why it exists:** Even the trust anchor must be temporally valid. An expired root CA means the entire trust chain is no longer authoritative.
+
+**Expected outcome:** Non-zero exit; chain temporal validation must fail at the root CA level.
+
+**Impact if it fails:** **Security failure** - an expired root CA could continue to anchor trust chains, undermining the entire certificate lifecycle management model.
+
+#### `certificate-all-expired_fail`
+**Spec:** §4.1, §8.2
+
+**What it tests:** An entire certificate chain where **root, intermediate, and leaf** are all expired. This is the scenario identified in sigstore/model-transparency#663 where implementations that pin verification time to the leaf's notBefore could tautologically pass chain validation.
+
+**Setup:** All three certificates have validity periods entirely in the past (root and intermediate: Jan-Jun 2020, leaf: Feb-Mar 2020). The leaf's notBefore falls within the CA validity windows, so a verifier that pins time to notBefore would incorrectly find all certs valid.
+
+**Why it exists:** Verifiers must use the current wall-clock time for validity checks, not the certificate's own notBefore. Pinning to notBefore creates a tautological pass: any self-consistent chain of expired certs would verify, defeating the purpose of certificate expiry.
+
+**Expected outcome:** Non-zero exit; temporal validation must fail for all certificates in the chain.
+
+**Impact if it fails:** **Critical security failure** - the time-pinning bug (issue #663) means any expired certificate chain that was internally consistent would be accepted, completely negating certificate expiry as a security control.
 
 #### `key-verify-as-certificate_fail`
 **Spec:** §4.1
@@ -1295,8 +1350,8 @@ Example (abbreviated):
 | Category | Count |
 |---|---|
 | Verify - positive | 6 |
-| Verify - negative | 28 |
+| Verify - negative | 32 |
 | Verify - historical | 15 |
 | Roundtrip | 37 |
-| **Total** | **86** |
+| **Total** | **90** |
 

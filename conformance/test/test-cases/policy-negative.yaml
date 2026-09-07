@@ -36,6 +36,52 @@ tests:
   bundle_source:
     type: sign
     key_group: expired
+
+- id: certificate-not-yet-valid_fail
+  description: 'FAIL: Rejection when signing certificate validity period is in the future'
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: certificate
+  model: simple
+  bundle_source:
+    type: sign
+    key_group: not-yet-valid
+
+- id: certificate-expired-intermediate_fail
+  description: 'FAIL: Rejection when intermediate CA certificate in the chain is expired'
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: certificate
+  model: simple
+  bundle_source:
+    type: sign
+    key_group: expired-intermediate
+
+- id: certificate-expired-root_fail
+  description: 'FAIL: Rejection when root CA certificate used as trust anchor is expired'
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: certificate
+  model: simple
+  bundle_source:
+    type: sign
+    key_group: expired-root
+
+- id: certificate-all-expired_fail
+  description: 'FAIL: Rejection when all certificates in the chain (root, intermediate,
+    leaf) are expired'
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: certificate
+  model: simple
+  bundle_source:
+    type: sign
+    key_group: all-expired
+
 - id: certificate-simple-wrong-ca_fail
   description: 'FAIL: Rejection when CA certificate used for verification is not the
     signing CA'

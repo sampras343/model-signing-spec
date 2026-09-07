@@ -146,6 +146,101 @@ keys:
         files: [ca-cert.pem]
         from_group: certificate
 
+  - name: not-yet-valid
+    description: Leaf cert whose validity period is in the future (notBefore = now + 1 year)
+    purpose: Test that certificates not yet valid are rejected during signing or verification
+    when_to_use: Negative test for certificate temporal validation (future validity)
+    curve: P-384
+    depends_on: certificate
+    files:
+      - name: signing-key.pem
+        description: EC P-384 private key for not-yet-valid cert
+      - name: signing-key-cert.pem
+        description: Leaf certificate with notBefore in the future
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: sign_cert
+        file: signing-key-cert.pem
+      - role: sign_cert_chain
+        files: [int-ca-cert.pem]
+        from_group: certificate
+      - role: verify_cert_chain
+        files: [ca-cert.pem]
+        from_group: certificate
+
+  - name: expired-intermediate
+    description: Expired intermediate CA with valid leaf cert
+    purpose: Test that an expired intermediate CA causes chain verification to fail
+    when_to_use: Negative test for intermediate CA temporal validation
+    curve: P-384
+    depends_on: certificate
+    files:
+      - name: signing-key.pem
+        description: EC P-384 private key for leaf cert
+      - name: signing-key-cert.pem
+        description: Valid leaf certificate issued by expired intermediate CA
+      - name: int-ca-cert.pem
+        description: Expired intermediate CA certificate (notAfter 2020-01-02)
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: sign_cert
+        file: signing-key-cert.pem
+      - role: sign_cert_chain
+        files: [int-ca-cert.pem]
+      - role: verify_cert_chain
+        files: [ca-cert.pem]
+        from_group: certificate
+
+  - name: expired-root
+    description: Expired root CA with valid intermediate and leaf certs
+    purpose: Test that an expired root CA causes chain verification to fail
+    when_to_use: Negative test for root CA temporal validation
+    curve: P-384
+    files:
+      - name: signing-key.pem
+        description: EC P-384 private key for leaf cert
+      - name: signing-key-cert.pem
+        description: Valid leaf certificate
+      - name: int-ca-cert.pem
+        description: Valid intermediate CA certificate
+      - name: ca-cert.pem
+        description: Expired root CA certificate (notAfter 2020-01-02)
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: sign_cert
+        file: signing-key-cert.pem
+      - role: sign_cert_chain
+        files: [int-ca-cert.pem]
+      - role: verify_cert_chain
+        files: [ca-cert.pem]
+
+  - name: all-expired
+    description: Entire chain (root + intermediate + leaf) all expired
+    purpose: Test that verification rejects when all certificates in the chain are expired
+    when_to_use: Negative test for tautological time-pinning bug (issue 663)
+    curve: P-384
+    files:
+      - name: signing-key.pem
+        description: EC P-384 private key for expired leaf cert
+      - name: signing-key-cert.pem
+        description: Expired leaf certificate (notAfter 2020-03-01)
+      - name: int-ca-cert.pem
+        description: Expired intermediate CA certificate (notAfter 2020-06-01)
+      - name: ca-cert.pem
+        description: Expired root CA certificate (notAfter 2020-06-01)
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: sign_cert
+        file: signing-key-cert.pem
+      - role: sign_cert_chain
+        files: [int-ca-cert.pem]
+      - role: verify_cert_chain
+        files: [ca-cert.pem]
+
   - name: no-code-signing
     description: Leaf cert WITHOUT code_signing EKU, signed by certificate chain
     purpose: Test that signing with a cert lacking code_signing EKU is rejected

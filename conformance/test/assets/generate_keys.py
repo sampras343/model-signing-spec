@@ -133,10 +133,14 @@ def _add_aki(
 
 def _build_root_ca(
     key: ec.EllipticCurvePrivateKey,
+    *,
+    cn: str = "root-ca",
+    not_valid_before: datetime.datetime | None = None,
+    not_valid_after: datetime.datetime | None = None,
 ) -> x509.Certificate:
     """Self-signed root CA certificate."""
     subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, "root-ca"),
+        x509.NameAttribute(NameOID.COMMON_NAME, cn),
     ])
     now = _now()
     pub = key.public_key()
@@ -146,8 +150,8 @@ def _build_root_ca(
         .issuer_name(issuer)
         .public_key(pub)
         .serial_number(x509.random_serial_number())
-        .not_valid_before(now)
-        .not_valid_after(now + _TEN_YEARS)
+        .not_valid_before(not_valid_before or now)
+        .not_valid_after(not_valid_after or (now + _TEN_YEARS))
         .add_extension(
             x509.BasicConstraints(ca=True, path_length=None),
             critical=True,
@@ -175,10 +179,14 @@ def _build_intermediate_ca(
     ca_key: ec.EllipticCurvePrivateKey,
     ca_cert: x509.Certificate,
     int_key: ec.EllipticCurvePrivateKey,
+    *,
+    cn: str = "intermediate-ca",
+    not_valid_before: datetime.datetime | None = None,
+    not_valid_after: datetime.datetime | None = None,
 ) -> x509.Certificate:
     """Intermediate CA certificate signed by root CA."""
     subject = x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, "intermediate-ca"),
+        x509.NameAttribute(NameOID.COMMON_NAME, cn),
     ])
     now = _now()
     pub = int_key.public_key()
@@ -188,8 +196,8 @@ def _build_intermediate_ca(
         .issuer_name(ca_cert.subject)
         .public_key(pub)
         .serial_number(x509.random_serial_number())
-        .not_valid_before(now)
-        .not_valid_after(now + _TEN_YEARS)
+        .not_valid_before(not_valid_before or now)
+        .not_valid_after(not_valid_after or (now + _TEN_YEARS))
         .add_extension(
             x509.BasicConstraints(ca=True, path_length=0),
             critical=True,
@@ -460,6 +468,119 @@ def generate_all_keys(
     )
     _write_private_key(expired_dir / "signing-key.pem", expired_key)
     _write_cert(expired_dir / "signing-key-cert.pem", expired_cert)
+
+    # ------------------------------------------------------------------
+    # not-yet-valid/ -- leaf cert whose validity period is in the future
+    #                   (curve from keys.yaml, default P-384)
+    # ------------------------------------------------------------------
+    nyv_dir = keys_dir / "not-yet-valid"
+    nyv_curve = _resolve_curve(keys_manifest, "not-yet-valid", ec.SECP384R1())
+
+    nyv_key, nyv_pub = _generate_ec_keypair(nyv_curve)
+    now = _now()
+    nyv_cert = _build_signing_cert(
+        int_ca_key,
+        int_ca_cert,
+        nyv_pub,
+        cn="not-yet-valid-signing-key",
+        not_valid_before=now + datetime.timedelta(days=365),
+        not_valid_after=now + datetime.timedelta(days=730),
+        is_ca=False,
+    )
+    _write_private_key(nyv_dir / "signing-key.pem", nyv_key)
+    _write_cert(nyv_dir / "signing-key-cert.pem", nyv_cert)
+
+    # ------------------------------------------------------------------
+    # expired-intermediate/ -- expired intermediate CA with valid leaf
+    #                          (curve from keys.yaml, default P-384)
+    # ------------------------------------------------------------------
+    ei_dir = keys_dir / "expired-intermediate"
+    ei_curve = _resolve_curve(
+        keys_manifest, "expired-intermediate", ec.SECP384R1(),
+    )
+
+    # Reuse the standard root CA (ca_key / ca_cert) from certificate/
+    ei_int_key, _ = _generate_ec_keypair(ei_curve)
+    ei_int_cert = _build_intermediate_ca(
+        ca_key,
+        ca_cert,
+        ei_int_key,
+        cn="expired-intermediate-ca",
+        not_valid_before=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc),
+        not_valid_after=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc),
+    )
+    ei_leaf_key, ei_leaf_pub = _generate_ec_keypair(ei_curve)
+    ei_leaf_cert = _build_signing_cert(
+        ei_int_key,
+        ei_int_cert,
+        ei_leaf_pub,
+        cn="leaf-of-expired-intermediate",
+    )
+    _write_private_key(ei_dir / "signing-key.pem", ei_leaf_key)
+    _write_cert(ei_dir / "signing-key-cert.pem", ei_leaf_cert)
+    _write_cert(ei_dir / "int-ca-cert.pem", ei_int_cert)
+
+    # ------------------------------------------------------------------
+    # expired-root/ -- expired root CA with valid intermediate and leaf
+    #                  (curve from keys.yaml, default P-384)
+    # ------------------------------------------------------------------
+    er_dir = keys_dir / "expired-root"
+    er_curve = _resolve_curve(keys_manifest, "expired-root", ec.SECP384R1())
+
+    er_root_key, _ = _generate_ec_keypair(er_curve)
+    er_root_cert = _build_root_ca(
+        er_root_key,
+        cn="expired-root-ca",
+        not_valid_before=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc),
+        not_valid_after=datetime.datetime(2020, 1, 2, tzinfo=datetime.timezone.utc),
+    )
+    er_int_key, _ = _generate_ec_keypair(er_curve)
+    er_int_cert = _build_intermediate_ca(
+        er_root_key, er_root_cert, er_int_key,
+        cn="intermediate-of-expired-root",
+    )
+    er_leaf_key, er_leaf_pub = _generate_ec_keypair(er_curve)
+    er_leaf_cert = _build_signing_cert(
+        er_int_key, er_int_cert, er_leaf_pub,
+        cn="leaf-of-expired-root",
+    )
+    _write_private_key(er_dir / "signing-key.pem", er_leaf_key)
+    _write_cert(er_dir / "signing-key-cert.pem", er_leaf_cert)
+    _write_cert(er_dir / "int-ca-cert.pem", er_int_cert)
+    _write_cert(er_dir / "ca-cert.pem", er_root_cert)
+
+    # ------------------------------------------------------------------
+    # all-expired/ -- entire chain (root + intermediate + leaf) expired
+    #                 (curve from keys.yaml, default P-384)
+    # ------------------------------------------------------------------
+    ae_dir = keys_dir / "all-expired"
+    ae_curve = _resolve_curve(keys_manifest, "all-expired", ec.SECP384R1())
+
+    ae_root_key, _ = _generate_ec_keypair(ae_curve)
+    ae_root_cert = _build_root_ca(
+        ae_root_key,
+        cn="all-expired-root-ca",
+        not_valid_before=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc),
+        not_valid_after=datetime.datetime(2020, 6, 1, tzinfo=datetime.timezone.utc),
+    )
+    ae_int_key, _ = _generate_ec_keypair(ae_curve)
+    ae_int_cert = _build_intermediate_ca(
+        ae_root_key, ae_root_cert, ae_int_key,
+        cn="all-expired-intermediate-ca",
+        not_valid_before=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc),
+        not_valid_after=datetime.datetime(2020, 6, 1, tzinfo=datetime.timezone.utc),
+    )
+    ae_leaf_key, ae_leaf_pub = _generate_ec_keypair(ae_curve)
+    ae_leaf_cert = _build_signing_cert(
+        ae_int_key, ae_int_cert, ae_leaf_pub,
+        cn="all-expired-leaf",
+        not_valid_before=datetime.datetime(2020, 2, 1, tzinfo=datetime.timezone.utc),
+        not_valid_after=datetime.datetime(2020, 3, 1, tzinfo=datetime.timezone.utc),
+    )
+    _write_private_key(ae_dir / "signing-key.pem", ae_leaf_key)
+    _write_cert(ae_dir / "signing-key-cert.pem", ae_leaf_cert)
+    _write_cert(ae_dir / "int-ca-cert.pem", ae_int_cert)
+    _write_cert(ae_dir / "ca-cert.pem", ae_root_cert)
 
     # ------------------------------------------------------------------
     # Standalone EC keypairs (curves from keys.yaml, defaults below)
