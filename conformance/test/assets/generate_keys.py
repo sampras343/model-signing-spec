@@ -583,6 +583,61 @@ def generate_all_keys(
     _write_cert(ae_dir / "ca-cert.pem", ae_root_cert)
 
     # ------------------------------------------------------------------
+    # not-yet-valid-intermediate/ -- not-yet-valid intermediate CA with valid leaf
+    #                                (row #5 from model-transparency#663)
+    # ------------------------------------------------------------------
+    nyi_dir = keys_dir / "not-yet-valid-intermediate"
+    nyi_curve = _resolve_curve(
+        keys_manifest, "not-yet-valid-intermediate", ec.SECP384R1(),
+    )
+    nyi_int_key, _ = _generate_ec_keypair(nyi_curve)
+    nyi_int_cert = _build_intermediate_ca(
+        ca_key,
+        ca_cert,
+        nyi_int_key,
+        cn="not-yet-valid-intermediate-ca",
+        not_valid_before=now + datetime.timedelta(days=365),
+        not_valid_after=now + datetime.timedelta(days=730),
+    )
+    nyi_leaf_key, nyi_leaf_pub = _generate_ec_keypair(nyi_curve)
+    nyi_leaf_cert = _build_signing_cert(
+        nyi_int_key, nyi_int_cert, nyi_leaf_pub,
+        cn="leaf-of-not-yet-valid-intermediate",
+    )
+    _write_private_key(nyi_dir / "signing-key.pem", nyi_leaf_key)
+    _write_cert(nyi_dir / "signing-key-cert.pem", nyi_leaf_cert)
+    _write_cert(nyi_dir / "int-ca-cert.pem", nyi_int_cert)
+
+    # ------------------------------------------------------------------
+    # expired-intermediate-expired-leaf/ -- valid root, expired intermediate
+    #                                       AND expired leaf (row #8 from
+    #                                       model-transparency#663)
+    # ------------------------------------------------------------------
+    eiel_dir = keys_dir / "expired-intermediate-expired-leaf"
+    eiel_curve = _resolve_curve(
+        keys_manifest, "expired-intermediate-expired-leaf", ec.SECP384R1(),
+    )
+    eiel_int_key, _ = _generate_ec_keypair(eiel_curve)
+    eiel_int_cert = _build_intermediate_ca(
+        ca_key,
+        ca_cert,
+        eiel_int_key,
+        cn="expired-int-for-expired-leaf",
+        not_valid_before=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc),
+        not_valid_after=datetime.datetime(2020, 6, 1, tzinfo=datetime.timezone.utc),
+    )
+    eiel_leaf_key, eiel_leaf_pub = _generate_ec_keypair(eiel_curve)
+    eiel_leaf_cert = _build_signing_cert(
+        eiel_int_key, eiel_int_cert, eiel_leaf_pub,
+        cn="expired-leaf-of-expired-int",
+        not_valid_before=datetime.datetime(2020, 2, 1, tzinfo=datetime.timezone.utc),
+        not_valid_after=datetime.datetime(2020, 3, 1, tzinfo=datetime.timezone.utc),
+    )
+    _write_private_key(eiel_dir / "signing-key.pem", eiel_leaf_key)
+    _write_cert(eiel_dir / "signing-key-cert.pem", eiel_leaf_cert)
+    _write_cert(eiel_dir / "int-ca-cert.pem", eiel_int_cert)
+
+    # ------------------------------------------------------------------
     # Standalone EC keypairs (curves from keys.yaml, defaults below)
     # ------------------------------------------------------------------
     _STANDALONE_DEFAULTS: dict[str, ec.EllipticCurve] = {

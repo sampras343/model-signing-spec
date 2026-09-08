@@ -82,6 +82,30 @@ tests:
     type: sign
     key_group: all-expired
 
+- id: certificate-not-yet-valid-intermediate_fail
+  description: 'FAIL: Rejection when intermediate CA certificate validity period is
+    in the future'
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: certificate
+  model: simple
+  bundle_source:
+    type: sign
+    key_group: not-yet-valid-intermediate
+
+- id: certificate-expired-intermediate-expired-leaf_fail
+  description: 'FAIL: Rejection when both intermediate CA and leaf certificate are
+    expired'
+  spec_refs:
+  - §4.1
+  - §8.2
+  method: certificate
+  model: simple
+  bundle_source:
+    type: sign
+    key_group: expired-intermediate-expired-leaf
+
 - id: certificate-simple-wrong-ca_fail
   description: 'FAIL: Rejection when CA certificate used for verification is not the
     signing CA'

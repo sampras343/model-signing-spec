@@ -264,6 +264,54 @@ keys:
         files: [ca-cert.pem]
         from_group: certificate
 
+  - name: not-yet-valid-intermediate
+    description: Not-yet-valid intermediate CA with valid leaf cert
+    purpose: Test rejection when intermediate CA validity period is in the future
+    when_to_use: "Negative test for intermediate CA temporal validation (issue #663 row 5)"
+    curve: P-384
+    depends_on: certificate
+    files:
+      - name: signing-key.pem
+        description: EC P-384 private key for leaf
+      - name: signing-key-cert.pem
+        description: Valid leaf certificate signed by not-yet-valid intermediate
+      - name: int-ca-cert.pem
+        description: Intermediate CA certificate with not_valid_before in the future
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: sign_cert
+        file: signing-key-cert.pem
+      - role: sign_cert_chain
+        files: [int-ca-cert.pem]
+      - role: verify_cert_chain
+        files: [ca-cert.pem]
+        from_group: certificate
+
+  - name: expired-intermediate-expired-leaf
+    description: Valid root, expired intermediate AND expired leaf
+    purpose: Test rejection when both intermediate and leaf are expired
+    when_to_use: "Negative test for cascading expiry (issue #663 row 8)"
+    curve: P-384
+    depends_on: certificate
+    files:
+      - name: signing-key.pem
+        description: EC P-384 private key for expired leaf
+      - name: signing-key-cert.pem
+        description: Expired leaf certificate
+      - name: int-ca-cert.pem
+        description: Expired intermediate CA certificate
+    roles:
+      - role: sign_private_key
+        file: signing-key.pem
+      - role: sign_cert
+        file: signing-key-cert.pem
+      - role: sign_cert_chain
+        files: [int-ca-cert.pem]
+      - role: verify_cert_chain
+        files: [ca-cert.pem]
+        from_group: certificate
+
   - name: wrong
     description: Unrelated CA and keypair for negative tests
     purpose: Verify that verification fails with non-matching keys

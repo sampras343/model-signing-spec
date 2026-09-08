@@ -1,6 +1,6 @@
 # Conformance test cases
 
-**90 tests** total: **37 roundtrip** (live sign, then verify) and **53 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in the [OMS Specification](https://github.com/ossf/model-signing-spec/blob/main/spec/v1.0.md); section references below use the same numbering as that spec.
+**92 tests** total: **37 roundtrip** (live sign, then verify) and **55 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in the [OMS Specification](https://github.com/ossf/model-signing-spec/blob/main/spec/v1.0.md); section references below use the same numbering as that spec.
 
 **oms-schemas:** Every successful roundtrip run validates produced bundles and decoded DSSE payloads against the published OMS JSON Schemas from the `oms-schemas` package (outer bundle, statement, predicate, resources), in addition to the test harness’s own structural checks.
 
@@ -19,6 +19,8 @@
 | §4.1 | Accept keyid absent/empty/null | Go vs Python bundles | Covered |
 | §4.1 | Certificate validity period enforced | certificate-expired_fail, certificate-not-yet-valid_fail | Covered |
 | §4.1 | Intermediate CA validity period enforced | certificate-expired-intermediate_fail | Covered |
+| §4.1 | Not-yet-valid intermediate CA rejected | certificate-not-yet-valid-intermediate_fail | Covered |
+| §4.1 | Cascading expiry (intermediate + leaf both expired) | certificate-expired-intermediate-expired-leaf_fail | Covered |
 | §4.1 | Root CA validity period enforced | certificate-expired-root_fail | Covered |
 | §4.1 | Full-chain expiry rejected (no time-pinning) | certificate-all-expired_fail | Covered |
 | §4.1 | Certificate must have code_signing EKU | certificate-no-code-signing-eku_fail | Covered |
@@ -368,7 +370,7 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 
 **Impact if it fails:** Latest sigstore bundles from Go v1.1.0 are unverifiable.
 
-### Negative cases (32)
+### Negative cases (34)
 
 #### `key-simple-tampered-content_fail`
 **Spec:** §8.4
@@ -603,6 +605,32 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 **Expected outcome:** Non-zero exit; temporal validation must fail for all certificates in the chain.
 
 **Impact if it fails:** **Critical security failure** - the time-pinning bug (issue #663) means any expired certificate chain that was internally consistent would be accepted, completely negating certificate expiry as a security control.
+
+#### `certificate-not-yet-valid-intermediate_fail`
+**Spec:** §4.1, §8.2
+
+**What it tests:** That verification rejects a certificate chain where the intermediate CA's validity period has not yet begun (notBefore is in the future).
+
+**Setup:** The root CA is valid, the intermediate CA has notBefore set to one year in the future, and the leaf certificate is issued by that not-yet-valid intermediate. The leaf itself has valid dates.
+
+**Why it exists:** Covers row #5 from sigstore/model-transparency#663. An intermediate CA that is not yet active should not be accepted for chain validation.
+
+**Expected outcome:** Non-zero exit code (verification rejected).
+
+**Impact if it fails:** Clients accept certificate chains with intermediate CAs whose validity period hasn't started, undermining temporal trust guarantees.
+
+#### `certificate-expired-intermediate-expired-leaf_fail`
+**Spec:** §4.1, §8.2
+
+**What it tests:** That verification rejects when both the intermediate CA and the leaf certificate are expired, even though the root CA is still valid.
+
+**Setup:** Valid root CA, but both the intermediate CA (Jan-Jun 2020) and the leaf (Feb-Mar 2020) have expired. This tests cascading expiry detection.
+
+**Why it exists:** Covers row #8 from sigstore/model-transparency#663. Even with a valid root, an expired intermediate + expired leaf chain must be rejected.
+
+**Expected outcome:** Non-zero exit code (verification rejected).
+
+**Impact if it fails:** Clients accept certificate chains where only the root is valid but the entire signing path below it has expired.
 
 #### `key-verify-as-certificate_fail`
 **Spec:** §4.1
