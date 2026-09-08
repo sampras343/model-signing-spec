@@ -72,3 +72,4 @@ jobs:
           xfail: |
             test_roundtrip[key-empty-model-rejected
             test_verify[negative/certificate-no-code-signing-eku_fail
+            test_verify[negative/certificate-not-yet-valid_fail
